@@ -40,18 +40,26 @@ public class MessagePasser implements Serializable {
 	public static Map<String, Socket> map = new HashMap<String, Socket>();
 	public static Map<String, ObjectOutputStream> map2 = new HashMap<String, ObjectOutputStream>();
 	public static boolean IsEnd = false;
+	
+	private ClockService clockService = null;
+	
 	public MessagePasser() {
 		configuration_filename = null;
 		local_name = null;
-
 	}
 
 	public MessagePasser(String configuration_filename, String local_name) {
 		this.configuration_filename = configuration_filename;
 		this.local_name = local_name;
+		clockService = new LogicalClock();
 	}
 
 	public void send(Message message, int index) throws IOException {
+		
+		if (message instanceof TimeStampedMessage) {
+			System.out.println(clockService.getTimeStamp());
+			((TimeStampedMessage)message).setTimeStamp(clockService.getIncTimeStamp());
+		}
 
 		ObjectOutputStream ot;
 		Socket socket;
@@ -153,16 +161,21 @@ public class MessagePasser implements Serializable {
 
 		if (ReceiverBuffer.peek() != null) {
 			System.out.println("");
+			Message message = ReceiverBuffer.poll();
+			if (message instanceof TimeStampedMessage) {
+				clockService.updateTime(((TimeStampedMessage)message).getTimeStamp());
+				System.out.println(clockService.getTimeStamp());
+			}
 			System.out.println("Received message from "
-					+ ReceiverBuffer.peek().get_Src());
+					+ message.get_Src());
 			System.out.println("Message seqNum is "
-					+ ReceiverBuffer.peek().get_SeqNum());
+					+ message.get_SeqNum());
 			System.out.println("Message dup is  "
-					+ ReceiverBuffer.peek().get_Dupe());
+					+ message.get_Dupe());
 			System.out.println("Message kind is "
-					+ ReceiverBuffer.peek().get_Kind());
+					+ message.get_Kind());
 			System.out.println("Message body is "
-					+ (String) (ReceiverBuffer.poll().get_Data()));
+					+ (String) (message.get_Data()));
 			System.out.print(">: ");
 		}
 	}
@@ -401,7 +414,7 @@ public class MessagePasser implements Serializable {
 				System.out.println("Please enter the message body");
 				System.out.print(">: ");
 				message_body = input.readLine();
-				Message message = new Message(send_info[0], send_info[1],
+				Message message = new TimeStampedMessage(send_info[0], send_info[1],
 						message_body);
 
 				for (int i = 0; i < MP.NodeSet.size(); i++) {
