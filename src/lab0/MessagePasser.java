@@ -40,25 +40,107 @@ public class MessagePasser implements Serializable {
 	public static Map<String, Socket> map = new HashMap<String, Socket>();
 	public static Map<String, ObjectOutputStream> map2 = new HashMap<String, ObjectOutputStream>();
 	public static boolean IsEnd = false;
+	private boolean isLogical;
+	public String log_ip = "79.29.22.3";
 	
 	private ClockService clockService = null;
 	
-	public MessagePasser() {
-		configuration_filename = null;
-		local_name = null;
-	}
-
 	public MessagePasser(String configuration_filename, String local_name) {
 		this.configuration_filename = configuration_filename;
 		this.local_name = local_name;
-		clockService = new LogicalClock();
+
+	}
+	
+	
+	public boolean isLogical() {
+		return isLogical;
 	}
 
+	public void setLogical(boolean isLogical) {
+		this.isLogical = isLogical;
+	}
+	
+	
+
+	public void setClockService(boolean isLogical, int num, int index) {
+		if (isLogical == true) {
+			clockService = new LogicalClock();
+		} else {
+			clockService = new VectorClock(num, index);
+		}
+	}
+	
+	
+	public void send_log(Message message) throws IOException {
+		Socket socket = null;
+		try {
+			socket = new Socket (log_ip, 3333);
+		} catch (ConnectException e) {
+			System.out.println("Can not connect to Log server. Log info lost");
+			return;
+		}
+		ObjectOutputStream ot = new ObjectOutputStream(socket.getOutputStream());
+		ot.writeObject(message);
+		ot.flush();
+		ot.close();
+		socket.close();
+	}
+	
+	
+	public void mark(Message message) throws IOException {
+		if (isLogical == true) {
+			((TimeStampedMessage)message).setTimeStamp(clockService.getIncTimeStamp());
+			System.out.println(clockService.getTimeStamp());
+		} else {
+			
+			((TimeStampedMessage)message).setTimeStamp(clockService.getIncTimeStamp());
+			@SuppressWarnings("unchecked")
+			ArrayList<Integer> tmp = (ArrayList<Integer>)clockService.getTimeStamp();
+			
+			System.out.print(local_name +": current time stampe is ( ");
+			for (int i = 0; i < tmp.size(); i++) {
+				System.out.print(tmp.get(i) + " ");
+			}
+			System.out.println(")");
+			
+		}
+		
+		Socket socket = null;
+		try {
+			socket = new Socket (log_ip, 3333);
+		} catch (ConnectException e) {
+			System.out.println("Can not connect to Log server. Log info lost");
+			return;
+		}
+		ObjectOutputStream ot = new ObjectOutputStream(socket.getOutputStream());
+		ot.writeObject(message);
+		ot.flush();
+		ot.close();
+		socket.close();
+		
+	}
+	
+	
+	
 	public void send(Message message, int index) throws IOException {
 		
 		if (message instanceof TimeStampedMessage) {
-			System.out.println(clockService.getTimeStamp());
-			((TimeStampedMessage)message).setTimeStamp(clockService.getIncTimeStamp());
+			if (isLogical == true) {
+				((TimeStampedMessage)message).setTimeStamp(clockService.getIncTimeStamp());
+				System.out.println(clockService.getTimeStamp());
+			} else {
+				
+				((TimeStampedMessage)message).setTimeStamp(clockService.getIncTimeStamp());
+				@SuppressWarnings("unchecked")
+				ArrayList<Integer> tmp = (ArrayList<Integer>)clockService.getTimeStamp();
+				
+				System.out.print(local_name +": current time stampe is ( ");
+				for (int i = 0; i < tmp.size(); i++) {
+					System.out.print(tmp.get(i) + " ");
+				}
+				System.out.println(")");
+				
+			}
 		}
 
 		ObjectOutputStream ot;
@@ -163,9 +245,22 @@ public class MessagePasser implements Serializable {
 			System.out.println("");
 			Message message = ReceiverBuffer.poll();
 			if (message instanceof TimeStampedMessage) {
-				clockService.updateTime(((TimeStampedMessage)message).getTimeStamp());
-				System.out.println(clockService.getTimeStamp());
+				if (isLogical == true) {
+					clockService.updateTime(((TimeStampedMessage)message).getTimeStamp());
+					System.out.println(clockService.getTimeStamp());
+				} else {
+					clockService.updateTime(((TimeStampedMessage)message).getTimeStamp());	
+					@SuppressWarnings("unchecked")
+					ArrayList<Integer> tmp = (ArrayList<Integer>)clockService.getTimeStamp();	
+					System.out.print(local_name +": current time stampe is ( ");
+					for (int i = 0; i < tmp.size(); i++) {
+						System.out.print(tmp.get(i) + " ");
+					}
+					System.out.println(")");				
+				}
 			}
+			
+			
 			System.out.println("Received message from "
 					+ message.get_Src());
 			System.out.println("Message seqNum is "
@@ -340,9 +435,11 @@ public class MessagePasser implements Serializable {
 		String local_name = new String("");
 		String command = new String("");
 		String message_body = new String("");
+		String log_info = new String("");
 		String[] send_info;
 		int index = -1;
-		String x = new String("");
+		String ClockService_type = "";
+		
 		Scanner in = new Scanner(System.in);
 
 		System.out.println("Please enter the configuration_file name");
@@ -351,8 +448,30 @@ public class MessagePasser implements Serializable {
 		System.out.println("Please enter the local host name");
 		System.out.print(">: ");
 		local_name = in.next();
+		System.out.println("Please choose the ClockService type (logical or vector)");
+		System.out.print(">: ");
+		ClockService_type = in.next();
+	
+			
+		while (!ClockService_type.equals("logical") && !ClockService_type.equals("vector")) {
+			System.out.println("Please choose correct ClockService type(logical or vector)");
+			System.out.print(">: ");
+			ClockService_type = in.next();
+		}
+		
+		
+
+		
+		
 		MessagePasser MP = new MessagePasser(configuration_filename, local_name);
 
+		if (ClockService_type.equals("vector")) {
+			MP.setLogical(false);
+		} else {
+			MP.setLogical(true);
+		}
+		
+		
 		Parse p = new Parse();
 		try {
 			p.parseConf(MP.configuration_filename, MP.local_name);
@@ -375,48 +494,84 @@ public class MessagePasser implements Serializable {
 		}
 
 		System.out.println("Local name is " + p.getLocalNode().getName());
-
+		if (MP.isLogical() == true)
+			System.out.println("is Logical is true");
+		else 
+			System.out.println("is Logical is false");
+		
+		System.out.println("Total number is " + (NodeSet.size() + 1));
+		System.out.println("Index is " + p.getLocalIndex());
+		MP.setClockService(MP.isLogical(), (NodeSet.size() + 1), p.getLocalIndex());
 		MP.listener = new ServerSocket(p.getLocalNode().getPort().intValue());
-
 		MP.CreateThread(); // setUp the initial connection
 		MP.CreateReadThread(); //create receive
+		MP.log_ip = p.getLogip();
 
+		
+		
+		
 		try {
 			Thread.sleep(20);
 		} catch (InterruptedException e) {
 		}
 		
 		
-		System.out.println("Please enter 'send' or 'exit'");
+		System.out.println("Please enter 'send' or 'exit' or 'mark'");
 		System.out.print(">: ");
 		InputStreamReader reader = new InputStreamReader(System.in);
 		BufferedReader input = new BufferedReader(reader);
 		command = input.readLine();
 
 		while (!command.equals("exit")) {
-			if (!(command.equals("send"))) {
+			if (!(command.equals("send")) && !(command.equals("mark"))) {
 				System.out.println("Enter the right command!");
 				System.out.print(">: ");
 				command = input.readLine();
 				continue;
 			}
+			
+			if (command.equals("mark")) {
+				Message mark_message = new TimeStampedMessage("logger", "log", "This is a mark");
+				mark_message.set_Src(local_name);
+				mark_message.set_SeqNum(9999);
+				MP.mark(mark_message);
+				System.out.println("Please enter 'send' or 'exit' or 'mark'");
+				System.out.print(">: ");
+				command = input.readLine();
+				continue;
+			}
+			
 
 			if (command.equals("send")) {
 				System.out.println("Please specify the message dest and kind");
 				System.out.print(">: ");
 				send_info = input.readLine().split(" ");
+				
 				while (send_info.length != 2) {
 					System.out
 							.println("Please specify the correct dest and kind");
 					System.out.print(">: ");
 					send_info = input.readLine().split(" ");
 				}
+				
 				System.out.println("Please enter the message body");
 				System.out.print(">: ");
 				message_body = input.readLine();
+				System.out.println("Do you want log this message (y/n)");
+				System.out.print(">: ");
+				log_info = input.readLine();
+				
+				while (!log_info.equals("y") && !log_info.equals("n")) {
+					System.out.println("Please choose y or n");
+					System.out.print(">: ");
+					log_info = input.readLine();
+				}
+			
+				
 				Message message = new TimeStampedMessage(send_info[0], send_info[1],
 						message_body);
-
+				
+				
 				for (int i = 0; i < MP.NodeSet.size(); i++) {
 					if (MP.NodeSet.get(i).getName().equals(message.get_Dest()))
 						index = i;
@@ -429,7 +584,7 @@ public class MessagePasser implements Serializable {
 					} catch (InterruptedException e) {
 					}
 
-					System.out.println("Please enter 'send' or 'exit'");
+					System.out.println("Please enter 'send' or 'exit' or 'mark'");
 					System.out.print(">: ");
 					command = input.readLine();
 					continue;
@@ -437,6 +592,10 @@ public class MessagePasser implements Serializable {
 								
 				
 				MP.send(message, index);
+				if (log_info.equals("y")) {
+					MP.send_log(message);
+				}
+				
 				index = -1;
 
 				try {
@@ -444,7 +603,7 @@ public class MessagePasser implements Serializable {
 				} catch (InterruptedException e) {
 				}
 
-				System.out.println("Please enter 'send' or 'exit'");
+				System.out.println("Please enter 'send' or 'exit' or 'mark'");
 				System.out.print(">: ");
 				command = input.readLine();
 				continue;
@@ -456,5 +615,7 @@ public class MessagePasser implements Serializable {
 		IsEnd = true;
 		System.out.println("Program exit normally");
 	}
+
+
 
 }

@@ -13,7 +13,10 @@ public class Parse {
 	private ArrayList<Rule> rules;
 	// private ArrayList<Rule> rRules = new ArrayList<Rule>();
 	private PeerNode local;
-
+	private Integer local_index = 0;
+	private Integer index = -1;
+	private String log_ip = "0.0.0.0";
+	
 	public void parseConf(String configuration_filename, String local_name)
 			throws FileNotFoundException {
 
@@ -31,10 +34,19 @@ public class Parse {
 						.get("ip").toString(), Long.parseLong(conf.get("port")
 						.toString()));
 				nodes.add(n);
+				
+				if (n.getName().equals("alice"))
+					log_ip = n.getIp();
+				
+				index++;
 			} else {
 				local = new PeerNode(conf.get("name").toString(), conf
 						.get("ip").toString(), Long.parseLong(conf.get("port")
 						.toString()));
+				if (local.getName().equals("alice"))
+					log_ip = local.getIp();
+				index++;
+				local_index = index;
 			}
 		}
 	}
@@ -75,47 +87,19 @@ public class Parse {
 		return rules;
 	}
 
-	// public void parseReceiveRule(String configuration_filename)
-	// throws FileNotFoundException {
-	//
-	// InputStream input = new FileInputStream(
-	// new File(configuration_filename));
-	// Yaml yaml = new Yaml();
-	// Map<String, Object> map = (Map<String, Object>) yaml.load(input);
-	//
-	// // parse receive rules
-	// List<Object> recRules = (List<Object>) map.get("receiveRules");
-	// for (Object rec : recRules) {
-	// Map<String, Object> recRule = (Map<String, Object>) rec;
-	// String src = null;
-	// String dest = null;
-	// String kind = null;
-	// Integer seqNum = null;
-	// if (recRule.get("src") != null)
-	// src = recRule.get("src").toString();
-	// if (recRule.get("dest") != null)
-	// dest = recRule.get("dest").toString();
-	// if (recRule.get("kind") != null)
-	// kind = recRule.get("kind").toString();
-	// if (recRule.get("seqNum") != null)
-	// seqNum = Integer.parseInt(recRule.get("seqNum").toString());
-	// Rule r = new Rule(recRule.get("action").toString(), src, dest,
-	// kind, seqNum);
-	// rRules.add(r);
-	// }
-	// }
+
+	public String getLogip() {
+		return log_ip;
+	}
 
 	public ArrayList<PeerNode> getPeerNodes() {
 		return nodes;
 	}
 
-	// public ArrayList<Rule> getSendRules() {
-	// return sRules;
-	// }
 
-	// public ArrayList<Rule> getReceiveRules() {
-	// return rRules;
-	// }
+	public Integer getLocalIndex() {
+		return local_index;
+	}
 
 	public PeerNode getLocalNode() {
 		return local;

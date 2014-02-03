@@ -13,7 +13,7 @@ public class VectorClock extends ClockService {
 		sumProc = sum;
 		this.index = index;
 		array = new ArrayList<Integer>();
-		for (int i = 0; i < sum; ++i) {
+		for (int i = 0; i < sumProc; ++i) {
 			array.add(0);
 		}
 	}
