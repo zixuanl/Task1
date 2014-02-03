@@ -136,7 +136,16 @@ public class Logger_vector {
 		
 		for (int i = 0; i < information.size()-1; i++) {
 			for (int j = i+1; j < information.size(); j ++)
-				System.out.println(i + compare(i, j) + j);
+			{	
+				String temp = compare(i, j);
+				if (temp.equals(" -> "))
+					System.out.println(i + compare(i, j) + j);
+				else if (temp.equals(" <- ")) {
+					System.out.println(j + " -> " + i);
+				} else {
+					System.out.println(i + compare(i, j) + j);
+				}
+			}
 		}
 		mutex.release();
 		
