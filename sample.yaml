@@ -16,8 +16,8 @@ configuration :
   ip   : 127.0.0.1
   port : 12998
 - name : daphnie
-  ip   : 128.237.223.219
-  port : 1987
+  ip   : 127.0.0.1
+  port : 15555
 
   
 # This is the incoming port on which MP will listen
