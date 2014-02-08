@@ -189,6 +189,7 @@ public class VectorLogger {
 		}
 		in.close();
 		System.out.println("VectorLogger terminated normally");
+		System.exit(0);
 	}
 
 }

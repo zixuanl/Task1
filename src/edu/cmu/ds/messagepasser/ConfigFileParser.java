@@ -1,7 +1,11 @@
 package edu.cmu.ds.messagepasser;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -17,6 +21,7 @@ public class ConfigFileParser {
 	private ArrayList<Rule> sendRules, receiveRules;
 	private Node localNode;
 	private Integer localNodeIndex = 0;
+	private Map<String, List<String>> groups = new HashMap<String, List<String>>();
 
 	@SuppressWarnings("unchecked")
 	public ConfigFileParser(String configurationFileName, String localName)
@@ -27,6 +32,7 @@ public class ConfigFileParser {
 		Map<String, Object> configMap = (Map<String, Object>) yaml.load(input);
 
 		setUpNodes(configMap, localName);
+		setUpGroups(configMap);
 		setUpLogger(configMap);
 		sendRules = parseRules(configMap, "sendRules");
 		receiveRules = parseRules(configMap, "receiveRules");
@@ -55,6 +61,21 @@ public class ConfigFileParser {
 				localNodeIndex = nodeIndex;
 			}
 			nodeIndex++;
+		}
+	}
+	
+	/**
+	 * Read configuration map loaded from file, and set up node groups
+	 * @param configMap
+	 */
+	@SuppressWarnings("unchecked")
+	private void setUpGroups(Map<String, Object> configMap) {
+		List<Object> groupList = (List<Object>) configMap.get("groups");
+		for (Object g : groupList) {
+			Map<String, Object> groupEntry = (Map<String, Object>) g;
+			String name = groupEntry.get("name").toString();
+			List<String> members = (List<String>) groupEntry.get("members");
+			groups.put(name, members);
 		}
 	}
 
@@ -139,5 +160,9 @@ public class ConfigFileParser {
 
 	public ArrayList<Rule> getReceiveRules() {
 		return receiveRules;
+	}
+	
+	public List<String> getGroupMembers(String groupName) {
+		return groups.get(groupName);
 	}
 }
