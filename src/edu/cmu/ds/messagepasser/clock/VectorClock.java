@@ -34,6 +34,7 @@ public class VectorClock extends ClockService {
 		return result;
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
 	public void updateTime(Object timeStamp) {
 		ArrayList<Integer> newTime = (ArrayList<Integer>) timeStamp;
@@ -51,6 +52,7 @@ public class VectorClock extends ClockService {
 		}
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
 	public Object getTimeStamp() {
 		// TODO Auto-generated method stub

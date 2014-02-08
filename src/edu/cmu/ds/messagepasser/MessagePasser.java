@@ -13,7 +13,6 @@ import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Scanner;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -37,8 +36,8 @@ public class MessagePasser {
 	private ArrayList<Rule> sendRuleList;
 	private ArrayList<Node> peerNodeList;
 	private ServerSocket listenerSocket;
-	private Map<String, Socket> nodeNameSocketPool = new HashMap<String, Socket>();
-	private Map<String, ObjectOutputStream> nodeNameOutputPool = new HashMap<String, ObjectOutputStream>();
+	private Map<String, Socket> clientSocketPool = new HashMap<String, Socket>();
+	private Map<String, ObjectOutputStream> clientOutputPool = new HashMap<String, ObjectOutputStream>();
 	private boolean willTerminate = false;
 	private boolean isLogicalClock;
 	private Integer localNodeIndex;
@@ -46,7 +45,8 @@ public class MessagePasser {
 	private Integer loggerPort = null;
 	private ClockService clockService = null;
 
-	public MessagePasser(String configuration_filename, String local_name) throws FileNotFoundException {
+	public MessagePasser(String configuration_filename, String local_name)
+			throws FileNotFoundException {
 		this.configurationFileName = configuration_filename;
 		this.localName = local_name;
 
@@ -68,7 +68,7 @@ public class MessagePasser {
 			e.printStackTrace();
 		}
 	}
-	
+
 	/**
 	 * Print all MessagePasser's information
 	 */
@@ -88,9 +88,13 @@ public class MessagePasser {
 
 	/**
 	 * Initiate the selected clock service
-	 * @param isLogical True if you want to use a logical clock. False if vector.
-	 * @param numberOfNodes Number of nodes (for vector clock only)
-	 * @param localNodeIndex Local node's index (for vector clock only)
+	 * 
+	 * @param isLogical
+	 *            True if you want to use a logical clock. False if vector.
+	 * @param numberOfNodes
+	 *            Number of nodes (for vector clock only)
+	 * @param localNodeIndex
+	 *            Local node's index (for vector clock only)
 	 */
 	public void setClockService(boolean isLogical, int numberOfNodes, int localNodeIndex) {
 		if (isLogical == true) {
@@ -101,7 +105,9 @@ public class MessagePasser {
 	}
 
 	/**
-	 * Send a message to the logger but not increment time stamp (for used by send() and receive() only)
+	 * Send a message to the logger but not increment time stamp (for used by
+	 * send() and receive() only)
+	 * 
 	 * @param message
 	 * @throws IOException
 	 */
@@ -122,6 +128,7 @@ public class MessagePasser {
 
 	/**
 	 * Increment local timestamp and send a message only to the logger
+	 * 
 	 * @param message
 	 * @throws IOException
 	 */
@@ -158,8 +165,9 @@ public class MessagePasser {
 
 	}
 
-	/** 
+	/**
 	 * Send a message to destination
+	 * 
 	 * @param message
 	 * @param index
 	 * @throws IOException
@@ -168,14 +176,18 @@ public class MessagePasser {
 
 		if (message instanceof TimeStampedMessage) {
 			if (isLogicalClock == true) {
+				/*
+				 * Send logical
+				 */
 				((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
 				System.out.println(clockService.getTimeStamp());
 			} else {
-
+				/*
+				 * Send vector
+				 */
 				((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
 				@SuppressWarnings("unchecked")
 				ArrayList<Integer> tmp = (ArrayList<Integer>) clockService.getTimeStamp();
-
 				System.out.print(localName + ": current time stampe is ( ");
 				for (int i = 0; i < tmp.size(); i++) {
 					System.out.print(tmp.get(i) + " ");
@@ -189,19 +201,19 @@ public class MessagePasser {
 		Socket socket;
 		boolean isDupe = false;
 		try {
-			if (!nodeNameOutputPool.containsKey(message.getDestination())) {
+			if (!clientOutputPool.containsKey(message.getDestination())) {
 				socket = new Socket(peerNodeList.get(index).getIp(), peerNodeList.get(index)
 						.getPort().intValue());
 				ObjectOutputStream ot_temp = new ObjectOutputStream(socket.getOutputStream());
-				nodeNameSocketPool.put(message.getDestination(), socket);
-				nodeNameOutputPool.put(message.getDestination(), ot_temp);
+				clientSocketPool.put(message.getDestination(), socket);
+				clientOutputPool.put(message.getDestination(), ot_temp);
 				System.out.println("Connect to " + message.getDestination() + " is established");
 			}
 		} catch (ConnectException e) {
 			System.out.println(message.getDestination() + " is not online!");
 			return;
 		}
-		ot = nodeNameOutputPool.get(message.getDestination());
+		ot = clientOutputPool.get(message.getDestination());
 
 		message.setSource(localName);
 		message.setSequenceNumber(sequenceNumber.addAndGet(1));
@@ -238,8 +250,8 @@ public class MessagePasser {
 
 		} catch (SocketException e) {
 
-			nodeNameSocketPool.remove(message.getDestination());
-			nodeNameOutputPool.remove(message.getDestination());
+			clientSocketPool.remove(message.getDestination());
+			clientOutputPool.remove(message.getDestination());
 			System.out.println(message.getDestination() + " is not online!");
 
 		}
@@ -259,12 +271,12 @@ public class MessagePasser {
 				return;
 			}
 			try {
-				if (!nodeNameOutputPool.containsKey(new_message.getDestination())) {
+				if (!clientOutputPool.containsKey(new_message.getDestination())) {
 					socket = new Socket(peerNodeList.get(index_delay).getIp(), peerNodeList
 							.get(index_delay).getPort().intValue());
 					ObjectOutputStream ot_temp = new ObjectOutputStream(socket.getOutputStream());
-					nodeNameSocketPool.put(new_message.getDestination(), socket);
-					nodeNameOutputPool.put(new_message.getDestination(), ot_temp);
+					clientSocketPool.put(new_message.getDestination(), socket);
+					clientOutputPool.put(new_message.getDestination(), ot_temp);
 					System.out.println("Connect to " + new_message.getDestination()
 							+ " is established");
 				}
@@ -272,7 +284,7 @@ public class MessagePasser {
 				System.out.println(new_message.getDestination() + " is not online!");
 				return;
 			}
-			ot2 = nodeNameOutputPool.get(new_message.getDestination());
+			ot2 = clientOutputPool.get(new_message.getDestination());
 			ot2.writeObject(new_message);
 			ot2.flush();
 
@@ -312,10 +324,12 @@ public class MessagePasser {
 			System.out.print(COMMAND_PROMPT);
 		}
 	}
-	
+
 	/**
 	 * Get an index number of a node with a specified name.
-	 * @param nodeName A name of the node
+	 * 
+	 * @param nodeName
+	 *            A name of the node
 	 * @return Index of the node. Null if the node with that name doesn't exist.
 	 */
 	public Integer getNodeIndex(String nodeName) {
@@ -330,6 +344,7 @@ public class MessagePasser {
 
 	/**
 	 * Start a thread that monitors for incoming data from a MessagePasser
+	 * 
 	 * @param socket
 	 * @throws IOException
 	 */
@@ -371,7 +386,7 @@ public class MessagePasser {
 							receiveBuffer.add(dup_message);
 							isDuplicate = false;
 						}
-						while (!receiveDelayedBuffer.isEmpty()) {
+						while (!receiveDelayedBuffer.isEmpty() && !willTerminate) {
 							receiveBuffer.add(receiveDelayedBuffer.poll());
 						}
 					}
@@ -384,7 +399,7 @@ public class MessagePasser {
 					}
 				}
 			}
-		}).start();
+		}, "clientThread " + this.hashCode()).start();
 	}
 
 	/**
@@ -409,7 +424,7 @@ public class MessagePasser {
 					}
 				}
 			}
-		}).start();
+		}, "listener").start();
 	}
 
 	/**
@@ -428,7 +443,7 @@ public class MessagePasser {
 					e.printStackTrace();
 				}
 			}
-		}).start();
+		}, "messageReceiver").start();
 	}
 
 	/**
@@ -473,22 +488,14 @@ public class MessagePasser {
 		return null;
 	}
 
-	/**
-	 * Terminate MessagePasser This will set a terminate flag that is constantly
-	 * monitored by every thread.
-	 */
-	public void terminate() {
-		willTerminate = true;
-	}
-
 	public static void main(String[] args) throws Exception {
 		InputStreamReader reader = new InputStreamReader(System.in);
 		BufferedReader input = new BufferedReader(reader);
-		
+
 		System.out.println("Please enter the local host name");
 		System.out.print(COMMAND_PROMPT);
 		String localName = input.readLine();
-		
+
 		MessagePasser messagePasser;
 		while (true) {
 			try {
@@ -516,10 +523,10 @@ public class MessagePasser {
 				break;
 			}
 		}
-		
+
 		messagePasser.printInfo();
 		System.out.println("Please enter 'send' or 'exit' or 'mark'");
-		System.out.print(COMMAND_PROMPT);
+		System.out.print(clockType + " " + localName + COMMAND_PROMPT);
 		String command;
 		while ((command = input.readLine()) != null) {
 			if (command.equals("exit")) {
@@ -535,7 +542,7 @@ public class MessagePasser {
 				String[] sendInfo;
 				do {
 					System.out.println("Please specify the message: <destination> <kind>");
-					System.out.print(COMMAND_PROMPT);
+					System.out.print(localName + COMMAND_PROMPT);
 					sendInfo = input.readLine().split(" ");
 				} while (sendInfo.length != 2);
 				String destination = sendInfo[0];
@@ -543,14 +550,14 @@ public class MessagePasser {
 
 				// Retrieve message body
 				System.out.println("Please enter the message body");
-				System.out.print(COMMAND_PROMPT);
+				System.out.print(localName + COMMAND_PROMPT);
 				String messageBody = input.readLine();
-				
+
 				// Check if the user wants to log
 				String logInfo;
 				do {
 					System.out.println("Do you want log this message? (y/n)");
-					System.out.print(COMMAND_PROMPT);
+					System.out.print(localName + COMMAND_PROMPT);
 					logInfo = input.readLine();
 				} while (!logInfo.equals("y") && !logInfo.equals("n"));
 				boolean mustLog = (logInfo.toLowerCase().equals("y"));
@@ -573,16 +580,19 @@ public class MessagePasser {
 				 */
 				Message markMessage = new TimeStampedMessage("logger", "log", "This is a mark.");
 				markMessage.setSource(localName);
-				markMessage.setSequenceNumber(Integer.MAX_VALUE); // We don't care this.
+				markMessage.setSequenceNumber(Integer.MAX_VALUE); // We don't
+																	// care
+																	// this.
 				messagePasser.mark(markMessage);
 			}
-			
+
 			System.out.println("Please enter 'send' or 'exit' or 'mark'");
-			System.out.print(COMMAND_PROMPT);
+			System.out.print(clockType + " " + localName + COMMAND_PROMPT);
 		}
 		input.close();
-		messagePasser.terminate();
+		// messagePasser.terminate();
 		System.out.println("Program exited normally");
+		System.exit(0);
 	}
 
 }

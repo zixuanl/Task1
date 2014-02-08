@@ -122,7 +122,7 @@ public class LogicalLogger {
 		Scanner in = new Scanner(System.in);
 		while (true) {
 			System.out.println("Please enter configuration file name");
-			System.out.print(">: ");
+			System.out.print("LogicalLogger>: ");
 			String configFileName = in.next();
 			try {
 				ConfigFileParser configParser = new ConfigFileParser(configFileName, null);
@@ -135,7 +135,7 @@ public class LogicalLogger {
 			}
 		}
 		System.out.println("Available commands: print, exit");
-		System.out.print(">: ");
+		System.out.print("LogicalLogger>: ");
 		String command;
 		while ((command = in.next()) != null) {
 			if (command.equals("exit"))
@@ -144,7 +144,7 @@ public class LogicalLogger {
 				printLoggedMessages();
 			else
 				System.out.println("Available commands: print, exit");
-			System.out.print(">: ");
+			System.out.print("LogicalLogger>: ");
 		}
 		in.close();
 		System.out.println("LogicalLogger terminated normally");

@@ -40,7 +40,7 @@ public class LogicalClock extends ClockService {
 	@Override
 	public Object getTimeStamp() {
 		// TODO Auto-generated method stub
-		int result = 0;
+		Integer result = 0;
 		try {
 			mutex.acquire();
 			result = count;

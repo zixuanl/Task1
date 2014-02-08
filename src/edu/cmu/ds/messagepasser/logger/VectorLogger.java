@@ -163,7 +163,7 @@ public class VectorLogger {
 		Scanner in = new Scanner(System.in);
 		while (true) {
 			System.out.println("Please enter configuration file name");
-			System.out.print(">: ");
+			System.out.print("VectorLogger>: ");
 			String configFileName = in.next();
 			try {
 				ConfigFileParser configParser = new ConfigFileParser(configFileName, null);
@@ -176,7 +176,7 @@ public class VectorLogger {
 			}
 		}
 		System.out.println("Available commands: print, exit");
-		System.out.print(">: ");
+		System.out.print("VectorLogger>: ");
 		String command;
 		while ((command = in.next()) != null) {
 			if (command.equals("exit"))
@@ -185,7 +185,7 @@ public class VectorLogger {
 				printLoggedMessages();
 			else
 				System.out.println("Available commands: print, exit");
-			System.out.print(">: ");
+			System.out.print("VectorLogger>: ");
 		}
 		in.close();
 		System.out.println("VectorLogger terminated normally");
