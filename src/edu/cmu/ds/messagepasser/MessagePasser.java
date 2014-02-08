@@ -1,4 +1,4 @@
-package lab0;
+package edu.cmu.ds.messagepasser;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
@@ -20,14 +20,23 @@ import java.util.Scanner;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
+
 import org.omg.CORBA.portable.InputStream;
+
+import edu.cmu.ds.messagepasser.clock.ClockService;
+import edu.cmu.ds.messagepasser.clock.LogicalClock;
+import edu.cmu.ds.messagepasser.clock.VectorClock;
+import edu.cmu.ds.messagepasser.model.Message;
+import edu.cmu.ds.messagepasser.model.Node;
+import edu.cmu.ds.messagepasser.model.Rule;
+import edu.cmu.ds.messagepasser.model.TimeStampedMessage;
 
 public class MessagePasser implements Serializable {
 	private static final long serialVersionUID = 1L;
 	/**
 	 * 
 	 */
-	public static String configuration_filename;
+	public String configuration_filename;
 	public String local_name;
 	private AtomicInteger seqNum = new AtomicInteger(-1);
 	public static ConcurrentLinkedQueue<Message> ReceiverBuffer = new ConcurrentLinkedQueue<Message>();
@@ -35,23 +44,23 @@ public class MessagePasser implements Serializable {
 	public static ConcurrentLinkedQueue<Message> SenderDelayBuffer = new ConcurrentLinkedQueue<Message>();
 	public static ArrayList<Rule> ReceiveRuleSet;
 	public static ArrayList<Rule> SendRuleSet;
-	public static ArrayList<PeerNode> NodeSet;
+	public static ArrayList<Node> NodeSet;
 	public static ServerSocket listener;
 	public static Map<String, Socket> map = new HashMap<String, Socket>();
 	public static Map<String, ObjectOutputStream> map2 = new HashMap<String, ObjectOutputStream>();
 	public static boolean IsEnd = false;
 	private boolean isLogical;
 	public String log_ip = "79.29.22.3";
-	
+	public int log_port = 3333;
+
 	private ClockService clockService = null;
-	
+
 	public MessagePasser(String configuration_filename, String local_name) {
 		this.configuration_filename = configuration_filename;
 		this.local_name = local_name;
 
 	}
-	
-	
+
 	public boolean isLogical() {
 		return isLogical;
 	}
@@ -59,8 +68,6 @@ public class MessagePasser implements Serializable {
 	public void setLogical(boolean isLogical) {
 		this.isLogical = isLogical;
 	}
-	
-	
 
 	public void setClockService(boolean isLogical, int num, int index) {
 		if (isLogical == true) {
@@ -69,12 +76,11 @@ public class MessagePasser implements Serializable {
 			clockService = new VectorClock(num, index);
 		}
 	}
-	
-	
+
 	public void send_log(Message message) throws IOException {
 		Socket socket = null;
 		try {
-			socket = new Socket (log_ip, 3333);
+			socket = new Socket(log_ip, log_port);
 		} catch (ConnectException e) {
 			System.out.println("Can not connect to Log server. Log info lost");
 			return;
@@ -85,29 +91,28 @@ public class MessagePasser implements Serializable {
 		ot.close();
 		socket.close();
 	}
-	
-	
+
 	public void mark(Message message) throws IOException {
 		if (isLogical == true) {
-			((TimeStampedMessage)message).setTimeStamp(clockService.getIncTimeStamp());
+			((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
 			System.out.println(clockService.getTimeStamp());
 		} else {
-			
-			((TimeStampedMessage)message).setTimeStamp(clockService.getIncTimeStamp());
+
+			((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
 			@SuppressWarnings("unchecked")
-			ArrayList<Integer> tmp = (ArrayList<Integer>)clockService.getTimeStamp();
-			
-			System.out.print(local_name +": current time stampe is ( ");
+			ArrayList<Integer> tmp = (ArrayList<Integer>) clockService.getTimeStamp();
+
+			System.out.print(local_name + ": current time stampe is ( ");
 			for (int i = 0; i < tmp.size(); i++) {
 				System.out.print(tmp.get(i) + " ");
 			}
 			System.out.println(")");
-			
+
 		}
-		
+
 		Socket socket = null;
 		try {
-			socket = new Socket (log_ip, 3333);
+			socket = new Socket(log_ip, 3333);
 		} catch (ConnectException e) {
 			System.out.println("Can not connect to Log server. Log info lost");
 			return;
@@ -117,29 +122,27 @@ public class MessagePasser implements Serializable {
 		ot.flush();
 		ot.close();
 		socket.close();
-		
+
 	}
-	
-	
-	
+
 	public void send(Message message, int index) throws IOException {
-		
+
 		if (message instanceof TimeStampedMessage) {
 			if (isLogical == true) {
-				((TimeStampedMessage)message).setTimeStamp(clockService.getIncTimeStamp());
+				((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
 				System.out.println(clockService.getTimeStamp());
 			} else {
-				
-				((TimeStampedMessage)message).setTimeStamp(clockService.getIncTimeStamp());
+
+				((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
 				@SuppressWarnings("unchecked")
-				ArrayList<Integer> tmp = (ArrayList<Integer>)clockService.getTimeStamp();
-				
-				System.out.print(local_name +": current time stampe is ( ");
+				ArrayList<Integer> tmp = (ArrayList<Integer>) clockService.getTimeStamp();
+
+				System.out.print(local_name + ": current time stampe is ( ");
 				for (int i = 0; i < tmp.size(); i++) {
 					System.out.print(tmp.get(i) + " ");
 				}
 				System.out.println(")");
-				
+
 			}
 		}
 
@@ -147,22 +150,21 @@ public class MessagePasser implements Serializable {
 		Socket socket;
 		boolean isDupe = false;
 		try {
-			if (!map2.containsKey(message.get_Dest())) {
+			if (!map2.containsKey(message.getDestination())) {
 				socket = new Socket(NodeSet.get(index).getIp(), NodeSet.get(index).getPort().intValue());
 				ObjectOutputStream ot_temp = new ObjectOutputStream(socket.getOutputStream());
-				map.put(message.get_Dest(), socket);
-				map2.put(message.get_Dest(), ot_temp);
-				System.out.println("Connect to " + message.get_Dest() + " is established");
-			} 
-		} 
-		catch (ConnectException e) {
-			System.out.println(message.get_Dest() + " is not online!");
+				map.put(message.getDestination(), socket);
+				map2.put(message.getDestination(), ot_temp);
+				System.out.println("Connect to " + message.getDestination() + " is established");
+			}
+		} catch (ConnectException e) {
+			System.out.println(message.getDestination() + " is not online!");
 			return;
 		}
-		ot = map2.get(message.get_Dest());
+		ot = map2.get(message.getDestination());
 
-		message.set_Src(local_name);
-		message.set_SeqNum(seqNum.addAndGet(1));
+		message.setSource(local_name);
+		message.setSeqNum(seqNum.addAndGet(1));
 		Rule r = check_SendRule(message);
 		if (r != null) {
 			String action = new String(r.getAction());
@@ -171,7 +173,7 @@ public class MessagePasser implements Serializable {
 				return;
 			}
 			if (action.equals("duplicate")) {
-				
+
 				System.out.println("Message has been duped in send side");
 				isDupe = true;
 
@@ -182,63 +184,60 @@ public class MessagePasser implements Serializable {
 				return;
 			}
 		}
-		
+
 		try {
 			ot.writeObject(message);
 			ot.flush();
 			if (isDupe == true) {
 				Message dup_message = new Message(message);
-				dup_message.set_Dupe(true);
+				dup_message.setIsDuplicate(true);
 				ot.writeObject(dup_message);
 				ot.flush();
 				isDupe = false;
 			}
-			
+
 		} catch (SocketException e) {
-			
-			map.remove(message.get_Dest());
-			map2.remove(message.get_Dest());
-			System.out.println(message.get_Dest() + " is not online!");
-			
+
+			map.remove(message.getDestination());
+			map2.remove(message.getDestination());
+			System.out.println(message.getDestination() + " is not online!");
+
 		}
-		
 
 		while (!SenderDelayBuffer.isEmpty()) {
 			int index_delay = -1;
 			ObjectOutputStream ot2;
-            Message new_message = new Message(SenderDelayBuffer.poll());
-            
-            for (int i = 0; i < NodeSet.size(); i++) {
-                if (NodeSet.get(i).getName().equals(new_message.get_Dest())) {
-                    index_delay = i;
-                }
-            }
-            if (index_delay == -1) {
-                System.out
-                        .println("Dest is not in the established node list");
-                return;
-            }
-            try {
-                if (!map2.containsKey(new_message.get_Dest())) {
-                    socket = new Socket(NodeSet.get(index_delay).getIp(), NodeSet.get(index_delay).getPort().intValue());
-                    ObjectOutputStream ot_temp = new ObjectOutputStream(socket.getOutputStream());
-                    map.put(new_message.get_Dest(), socket);
-                    map2.put(new_message.get_Dest(), ot_temp);
-                    System.out.println("Connect to " + new_message.get_Dest() + " is established");
-                }
-            } catch (ConnectException e) {
-                System.out.println(new_message.get_Dest() + " is not online!");
-                return;
-            }
-            ot2 = map2.get(new_message.get_Dest());
-            ot2.writeObject(new_message);
-            ot2.flush();
-            
+			Message new_message = new Message(SenderDelayBuffer.poll());
+
+			for (int i = 0; i < NodeSet.size(); i++) {
+				if (NodeSet.get(i).getName().equals(new_message.getDestination())) {
+					index_delay = i;
+				}
+			}
+			if (index_delay == -1) {
+				System.out.println("Dest is not in the established node list");
+				return;
+			}
+			try {
+				if (!map2.containsKey(new_message.getDestination())) {
+					socket = new Socket(NodeSet.get(index_delay).getIp(), NodeSet.get(index_delay).getPort().intValue());
+					ObjectOutputStream ot_temp = new ObjectOutputStream(socket.getOutputStream());
+					map.put(new_message.getDestination(), socket);
+					map2.put(new_message.getDestination(), ot_temp);
+					System.out.println("Connect to " + new_message.getDestination() + " is established");
+				}
+			} catch (ConnectException e) {
+				System.out.println(new_message.getDestination() + " is not online!");
+				return;
+			}
+			ot2 = map2.get(new_message.getDestination());
+			ot2.writeObject(new_message);
+			ot2.flush();
+
 		}
-	
+
 	}
 
-	
 	public void receive() {
 
 		if (ReceiverBuffer.peek() != null) {
@@ -246,31 +245,25 @@ public class MessagePasser implements Serializable {
 			Message message = ReceiverBuffer.poll();
 			if (message instanceof TimeStampedMessage) {
 				if (isLogical == true) {
-					clockService.updateTime(((TimeStampedMessage)message).getTimeStamp());
+					clockService.updateTime(((TimeStampedMessage) message).getTimeStamp());
 					System.out.println(clockService.getTimeStamp());
 				} else {
-					clockService.updateTime(((TimeStampedMessage)message).getTimeStamp());	
+					clockService.updateTime(((TimeStampedMessage) message).getTimeStamp());
 					@SuppressWarnings("unchecked")
-					ArrayList<Integer> tmp = (ArrayList<Integer>)clockService.getTimeStamp();	
-					System.out.print(local_name +": current time stampe is ( ");
+					ArrayList<Integer> tmp = (ArrayList<Integer>) clockService.getTimeStamp();
+					System.out.print(local_name + ": current time stampe is ( ");
 					for (int i = 0; i < tmp.size(); i++) {
 						System.out.print(tmp.get(i) + " ");
 					}
-					System.out.println(")");				
+					System.out.println(")");
 				}
 			}
-			
-			
-			System.out.println("Received message from "
-					+ message.get_Src());
-			System.out.println("Message seqNum is "
-					+ message.get_SeqNum());
-			System.out.println("Message dup is  "
-					+ message.get_Dupe());
-			System.out.println("Message kind is "
-					+ message.get_Kind());
-			System.out.println("Message body is "
-					+ (String) (message.get_Data()));
+
+			System.out.println("Received message from " + message.getSource());
+			System.out.println("Message seqNum is " + message.getSequenceNumber());
+			System.out.println("Message dup is  " + message.getIsDuplicate());
+			System.out.println("Message kind is " + message.getKind());
+			System.out.println("Message body is " + (String) (message.getData()));
 			System.out.print(">: ");
 		}
 	}
@@ -284,76 +277,69 @@ public class MessagePasser implements Serializable {
 				Socket socket = listener.accept();
 				l.add(socket);
 				CreateListenThread(socket, ReceiverBuffer, ReceiverDelayBuffer);
-				
+
 			}
 		} catch (SocketException e) {
-			
-			
+
 			for (int i = 0; i < l.size(); i++) {
 				l.get(i).close();
 			}
 			listener.close();
-		} 
+		}
 	}
 
-	private static void CreateListenThread(final Socket socket,
-			final ConcurrentLinkedQueue<Message> ReceiverBuffer,
-			final ConcurrentLinkedQueue<Message> ReceiverDelayBuffer)
-			throws IOException {
+	private static void CreateListenThread(final Socket socket, final ConcurrentLinkedQueue<Message> ReceiverBuffer,
+			final ConcurrentLinkedQueue<Message> ReceiverDelayBuffer) throws IOException {
 		new Thread(new Runnable() {
 			public void run() {
 				try {
-				    ObjectInputStream is = new ObjectInputStream(socket.getInputStream());
+					ObjectInputStream is = new ObjectInputStream(socket.getInputStream());
 					Message message;
 					boolean isDupe = false;
 					while (true) {
-						message = (Message)is.readObject();
+						message = (Message) is.readObject();
 						if (message == null)
 							continue;
 						Rule r = check_ReceiveRule(message);
 						if (r != null) {
 							String action = new String(r.getAction());
 							if (action.equals("drop")) {
-								System.out
-										.println("Message has been dropped in receive side");
+								System.out.println("Message has been dropped in receive side");
 								System.out.print(">: ");
 								continue;
 							}
 							if (action.equals("duplicate")) {
-								
+
 								isDupe = true;
-								
-								System.out
-										.println("Message has been duped in receive side");
+
+								System.out.println("Message has been duped in receive side");
 								System.out.print(">: ");
-								
+
 							}
 							if (action.equals("delay")) {
-								System.out
-										.println("Message has been delayed in receive side");
+								System.out.println("Message has been delayed in receive side");
 								System.out.print(">: ");
 								ReceiverDelayBuffer.add(message);
 								continue;
 							}
 						}
-						 
-			
+
 						ReceiverBuffer.add(message);
 						if (isDupe == true) {
 							Message dup_message = new Message(message);
-							dup_message.set_Dupe(true);
+							dup_message.setIsDuplicate(true);
 							ReceiverBuffer.add(dup_message);
 							isDupe = false;
 						}
-						
+
 						while (!ReceiverDelayBuffer.isEmpty()) {
 							ReceiverBuffer.add(ReceiverDelayBuffer.poll());
 						}
-					
+
 					}
 				} catch (Exception e) {
 					return;
-				} 
+				}
 			}
 		}).start();
 	}
@@ -371,17 +357,16 @@ public class MessagePasser implements Serializable {
 			}
 		}).start();
 	}
-	
-	
+
 	public void CreateReadThread() throws IOException {
 		new Thread(new Runnable() {
 			public void run() {
 				try {
-					
+
 					while (IsEnd == false) {
 						receive();
 					}
-					
+
 				} catch (Exception e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -390,42 +375,31 @@ public class MessagePasser implements Serializable {
 			}
 		}).start();
 	}
-	
-	
-	
-	
 
 	public Rule check_SendRule(Message message) {
-
-		Parse p = new Parse();
 		try {
-			SendRuleSet = p.parseRules(configuration_filename, "sendRules");
+			ConfigParser p = new ConfigParser(configuration_filename, local_name);
+			SendRuleSet = p.getSendRules();
+			for (int i = 0; i < SendRuleSet.size(); i++) {
+				if (SendRuleSet.get(i).matches(message))
+					return SendRuleSet.get(i);
+			}
 		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}
-
-		for (int i = 0; i < SendRuleSet.size(); i++) {
-			if (SendRuleSet.get(i).IsMatch(message))
-				return SendRuleSet.get(i);
 		}
 		return null;
 	}
 
-	public static Rule check_ReceiveRule(Message message) {
-
-		Parse p = new Parse();
+	public Rule check_ReceiveRule(Message message) {
 		try {
-			ReceiveRuleSet = p.parseRules(configuration_filename,
-					"receiveRules");
+			ConfigParser p = new ConfigParser(configuration_filename, local_name);
+			ReceiveRuleSet = p.getReceiveRules();
+			for (int i = 0; i < ReceiveRuleSet.size(); i++) {
+				if (ReceiveRuleSet.get(i).matches(message))
+					return ReceiveRuleSet.get(i);
+			}
 		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}
-
-		for (int i = 0; i < ReceiveRuleSet.size(); i++) {
-			if (ReceiveRuleSet.get(i).IsMatch(message))
-				return ReceiveRuleSet.get(i);
 		}
 		return null;
 	}
@@ -439,7 +413,7 @@ public class MessagePasser implements Serializable {
 		String[] send_info;
 		int index = -1;
 		String ClockService_type = "";
-		
+
 		Scanner in = new Scanner(System.in);
 
 		System.out.println("Please enter the configuration_file name");
@@ -451,18 +425,13 @@ public class MessagePasser implements Serializable {
 		System.out.println("Please choose the ClockService type (logical or vector)");
 		System.out.print(">: ");
 		ClockService_type = in.next();
-	
-			
+
 		while (!ClockService_type.equals("logical") && !ClockService_type.equals("vector")) {
 			System.out.println("Please choose correct ClockService type(logical or vector)");
 			System.out.print(">: ");
 			ClockService_type = in.next();
 		}
-		
-		
 
-		
-		
 		MessagePasser MP = new MessagePasser(configuration_filename, local_name);
 
 		if (ClockService_type.equals("vector")) {
@@ -470,52 +439,39 @@ public class MessagePasser implements Serializable {
 		} else {
 			MP.setLogical(true);
 		}
-		
-		
-		Parse p = new Parse();
+
+		ConfigParser p;
 		try {
-			p.parseConf(MP.configuration_filename, MP.local_name);
+			p = new ConfigParser(MP.configuration_filename, MP.local_name);
+			MP.NodeSet = p.getPeerNodes();
+			MP.ReceiveRuleSet = p.getReceiveRules();
+			MP.SendRuleSet = p.getSendRules();
+			System.out.println("Local name is " + p.getLocalNode().getName());
+			System.out.println("Total number is " + (NodeSet.size() + 1));
+			System.out.println("Index is " + p.getLocalNodeIndex());
+			MP.log_ip = p.getLoggerIp();
+			MP.log_port = p.getLoggerPort();
 		} catch (FileNotFoundException e) {
-			System.out.println("Can not find configuration_file!!");
-			System.out.println("Program exit unnormally");
+			System.out.println("Cannot read or config file is corrupt!");
+			System.out.println("Program exit abnormally");
 			return;
 		}
 
-		MP.NodeSet = p.getPeerNodes();
-		MP.ReceiveRuleSet = p
-				.parseRules(configuration_filename, "receiveRules");
-		MP.SendRuleSet = p.parseRules(configuration_filename, "sendRules");
-
-		if (p.getLocalNode() == null) {
-			System.out
-					.println("Can not find local host in configuration_file!!");
-			System.out.println("Program exit unnormally");
-			return;
-		}
-
-		System.out.println("Local name is " + p.getLocalNode().getName());
 		if (MP.isLogical() == true)
 			System.out.println("is Logical is true");
-		else 
+		else
 			System.out.println("is Logical is false");
-		
-		System.out.println("Total number is " + (NodeSet.size() + 1));
-		System.out.println("Index is " + p.getLocalIndex());
-		MP.setClockService(MP.isLogical(), (NodeSet.size() + 1), p.getLocalIndex());
+
+		MP.setClockService(MP.isLogical(), (NodeSet.size() + 1), p.getLocalNodeIndex());
 		MP.listener = new ServerSocket(p.getLocalNode().getPort().intValue());
 		MP.CreateThread(); // setUp the initial connection
-		MP.CreateReadThread(); //create receive
-		MP.log_ip = p.getLogip();
+		MP.CreateReadThread(); // create receive
 
-		
-		
-		
 		try {
 			Thread.sleep(20);
 		} catch (InterruptedException e) {
 		}
-		
-		
+
 		System.out.println("Please enter 'send' or 'exit' or 'mark'");
 		System.out.print(">: ");
 		InputStreamReader reader = new InputStreamReader(System.in);
@@ -529,56 +485,50 @@ public class MessagePasser implements Serializable {
 				command = input.readLine();
 				continue;
 			}
-			
+
 			if (command.equals("mark")) {
 				Message mark_message = new TimeStampedMessage("logger", "log", "This is a mark");
-				mark_message.set_Src(local_name);
-				mark_message.set_SeqNum(9999);
+				mark_message.setSource(local_name);
+				mark_message.setSeqNum(9999);
 				MP.mark(mark_message);
 				System.out.println("Please enter 'send' or 'exit' or 'mark'");
 				System.out.print(">: ");
 				command = input.readLine();
 				continue;
 			}
-			
 
 			if (command.equals("send")) {
 				System.out.println("Please specify the message dest and kind");
 				System.out.print(">: ");
 				send_info = input.readLine().split(" ");
-				
+
 				while (send_info.length != 2) {
-					System.out
-							.println("Please specify the correct dest and kind");
+					System.out.println("Please specify the correct dest and kind");
 					System.out.print(">: ");
 					send_info = input.readLine().split(" ");
 				}
-				
+
 				System.out.println("Please enter the message body");
 				System.out.print(">: ");
 				message_body = input.readLine();
 				System.out.println("Do you want log this message (y/n)");
 				System.out.print(">: ");
 				log_info = input.readLine();
-				
+
 				while (!log_info.equals("y") && !log_info.equals("n")) {
 					System.out.println("Please choose y or n");
 					System.out.print(">: ");
 					log_info = input.readLine();
 				}
-			
-				
-				Message message = new TimeStampedMessage(send_info[0], send_info[1],
-						message_body);
-				
-				
+
+				Message message = new TimeStampedMessage(send_info[0], send_info[1], message_body);
+
 				for (int i = 0; i < MP.NodeSet.size(); i++) {
-					if (MP.NodeSet.get(i).getName().equals(message.get_Dest()))
+					if (MP.NodeSet.get(i).getName().equals(message.getDestination()))
 						index = i;
 				}
 				if (index == -1) {
-					System.out
-							.println("Dest is not in the established node list");
+					System.out.println("Dest is not in the established node list");
 					try {
 						Thread.sleep(20);
 					} catch (InterruptedException e) {
@@ -589,13 +539,12 @@ public class MessagePasser implements Serializable {
 					command = input.readLine();
 					continue;
 				}
-								
-				
+
 				MP.send(message, index);
 				if (log_info.equals("y")) {
 					MP.send_log(message);
 				}
-				
+
 				index = -1;
 
 				try {
@@ -610,12 +559,9 @@ public class MessagePasser implements Serializable {
 			}
 		}
 
-		
 		MP.listener.close();
 		IsEnd = true;
 		System.out.println("Program exit normally");
 	}
-
-
 
 }

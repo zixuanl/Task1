@@ -1,17 +1,17 @@
-package lab0;
+package edu.cmu.ds.messagepasser.model;
 
-public class PeerNode {
+public class Node {
 	private String name;
 	private String ip;
-	private Long port;
-	
-	public PeerNode() {
+	private Integer port;
+
+	public Node() {
 		name = null;
 		ip = null;
 		port = null;
 	}
 
-	public PeerNode(String name, String ip, Long port) {
+	public Node(String name, String ip, Integer port) {
 		this.name = name;
 		this.ip = ip;
 		this.port = port;
@@ -33,14 +33,12 @@ public class PeerNode {
 		this.ip = ip;
 	}
 
-	public Long getPort() {
+	public Integer getPort() {
 		return port;
 	}
 
-	public void setPort(Long port) {
+	public void setPort(Integer port) {
 		this.port = port;
 	}
-	
-	
-	
+
 }

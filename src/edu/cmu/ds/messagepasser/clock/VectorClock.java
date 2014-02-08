@@ -1,4 +1,4 @@
-package lab0;
+package edu.cmu.ds.messagepasser.clock;
 
 import java.util.ArrayList;
 import java.util.concurrent.Semaphore;
@@ -29,7 +29,6 @@ public class VectorClock extends ClockService {
 			result = (ArrayList<Integer>)array.clone();
 			mutex.release();
 		} catch (Exception e) {
-			// e.printStackTrace();
 			mutex.release();
 		}
 		return result;
@@ -49,7 +48,6 @@ public class VectorClock extends ClockService {
 			}
 			mutex.release();
 		} catch (Exception e) {
-			// e.printStackTrace();
 			mutex.release();
 		}
 	}

@@ -19,7 +19,10 @@ configuration :
   ip   : 127.0.0.1
   port : 15555
 
-  
+logger :
+- ip : 127.0.0.1
+  port : 3333
+
 # This is the incoming port on which MP will listen
 # May be changed for further communication as usual
 sendRules :

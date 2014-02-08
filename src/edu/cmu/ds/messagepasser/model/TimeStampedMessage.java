@@ -1,4 +1,4 @@
-package lab0;
+package edu.cmu.ds.messagepasser.model;
 
 public class TimeStampedMessage extends Message {
 	/**
@@ -7,9 +7,8 @@ public class TimeStampedMessage extends Message {
 	private static final long serialVersionUID = 1L;
 	private Object timeStamp = null;
 
-	public TimeStampedMessage(String string, String string2, String message_body) {
-		// TODO Auto-generated constructor stub
-		super(string,  string2,  message_body);
+	public TimeStampedMessage(String destination, String kind, Object body) {
+		super(destination,  kind,  body);
 	}
 
 	public Object getTimeStamp() {
