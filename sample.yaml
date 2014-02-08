@@ -7,16 +7,16 @@
 # The local node’s name is included in this list
 configuration :
 - name : alice
-  ip   : 127.0.0.1
+  ip   : 128.237.181.49
   port : 12344
 - name : bob
-  ip   : 127.0.0.1
+  ip   : 128.237.176.160
   port : 14255
 - name : charlie
-  ip   : 127.0.0.1
+  ip   : 128.237.181.49
   port : 12998
 - name : daphnie
-  ip   : 128.237.223.219
+  ip   : 128.237.176.160
   port : 1987
 
   
