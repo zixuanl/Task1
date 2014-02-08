@@ -1,4 +1,4 @@
-package lab0;
+package edu.cmu.ds.messagepasser.clock;
 
 import java.util.ArrayList;
 import java.util.concurrent.Semaphore;
@@ -9,7 +9,7 @@ public class VectorClock extends ClockService {
 	private Integer index= null;
 	private Semaphore mutex = new Semaphore(1);
 	
-	VectorClock(int sum, int index){
+	public VectorClock(int sum, int index){
 		sumProc = sum;
 		this.index = index;
 		array = new ArrayList<Integer>();
@@ -29,15 +29,14 @@ public class VectorClock extends ClockService {
 			result = (ArrayList<Integer>)array.clone();
 			mutex.release();
 		} catch (Exception e) {
-			// e.printStackTrace();
 			mutex.release();
 		}
 		return result;
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
 	public void updateTime(Object timeStamp) {
-		// TODO Auto-generated method stub
 		ArrayList<Integer> newTime = (ArrayList<Integer>) timeStamp;
 		try {
 			mutex.acquire();
@@ -49,11 +48,11 @@ public class VectorClock extends ClockService {
 			}
 			mutex.release();
 		} catch (Exception e) {
-			// e.printStackTrace();
 			mutex.release();
 		}
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
 	public Object getTimeStamp() {
 		// TODO Auto-generated method stub

@@ -6,20 +6,36 @@
 # These names will be used for src and dest addresses for the Message
 # The local node’s name is included in this list
 configuration :
-- name : alice
-  ip   : 128.237.181.49
-  port : 12344
-- name : bob
-  ip   : 128.237.176.160
-  port : 14255
-- name : charlie
-  ip   : 128.237.181.49
-  port : 12998
-- name : daphnie
-  ip   : 128.237.176.160
-  port : 1987
+  - name : alice
+    ip   : 127.0.0.1
+    port : 12344
+  - name : bob
+    ip   : 127.0.0.1
+    port : 14255
+  - name : charlie
+    ip   : 127.0.0.1
+    port : 12998
+  - name : daphnie
+    ip   : 127.0.0.1
+    port : 15555
 
-  
+groups :
+  - name : Group1
+    members :
+      - alice
+      - bob
+      - charlie
+  - name : Group 2
+    members :
+      - daphnie
+      - bob
+      - charlie
+
+logger :
+  - ip : 127.0.0.1
+    port : 3333
+>>>>>>> 76d8c81f1dad40814a61e29e056020089e8a41e5
+
 # This is the incoming port on which MP will listen
 # May be changed for further communication as usual
 sendRules :
@@ -48,6 +64,3 @@ receiveRules :
     src    : alice
     seqNum : 20
 
-
-# 3rd message from Charlie that anyone
-# receives will be duplicated

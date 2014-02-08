@@ -1,4 +1,4 @@
-package lab0;
+package edu.cmu.ds.messagepasser.clock;
 
 import java.util.concurrent.Semaphore;
 
@@ -15,7 +15,6 @@ public class LogicalClock extends ClockService {
 			result = count;
 			mutex.release();
 		} catch (Exception e) {
-			// e.printStackTrace();
 			mutex.release();
 		}
 		return result;
@@ -34,7 +33,6 @@ public class LogicalClock extends ClockService {
 			}
 			mutex.release();
 		} catch (Exception e) {
-			// e.printStackTrace();
 			mutex.release();
 		}
 	}
@@ -42,13 +40,12 @@ public class LogicalClock extends ClockService {
 	@Override
 	public Object getTimeStamp() {
 		// TODO Auto-generated method stub
-		int result = 0;
+		Integer result = 0;
 		try {
 			mutex.acquire();
 			result = count;
 			mutex.release();
 		} catch (Exception e) {
-			// e.printStackTrace();
 			mutex.release();
 		}
 		return result;
