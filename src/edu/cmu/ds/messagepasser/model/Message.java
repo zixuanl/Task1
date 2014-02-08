@@ -93,7 +93,7 @@ public class Message implements Serializable {
 		this.source = source;
 	}
 	
-	public void setSeqNum(int sequeceNumber) {
+	public void setSequenceNumber(int sequeceNumber) {
 		sequenceNumber = sequeceNumber;
 	}
 	

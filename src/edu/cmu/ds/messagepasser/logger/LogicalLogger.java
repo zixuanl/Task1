@@ -12,13 +12,12 @@ import java.util.Queue;
 import java.util.Scanner;
 import java.util.concurrent.Semaphore;
 
-import edu.cmu.ds.messagepasser.ConfigParser;
+import edu.cmu.ds.messagepasser.ConfigFileParser;
 import edu.cmu.ds.messagepasser.model.TimeStampedMessage;
 
 public class LogicalLogger {
 
 	public static Queue<TimeStampedMessage> loggedMessages;
-	public static ServerSocket listenerSocket;
 	private static Semaphore mutex = new Semaphore(1);
 
 	/**
@@ -27,7 +26,7 @@ public class LogicalLogger {
 	 * 
 	 * @throws IOException
 	 */
-	public static void startListenerThread() throws IOException {
+	public static void startListenerThread(final ServerSocket listenerSocket) throws IOException {
 		new Thread(new Runnable() {
 			public void run() {
 				try {
@@ -42,6 +41,7 @@ public class LogicalLogger {
 						for (int i = 0; i < acceptedClientsList.size(); i++) {
 							acceptedClientsList.get(i).close();
 						}
+					} finally {
 						listenerSocket.close();
 					}
 				} catch (Exception e) {
@@ -125,16 +125,15 @@ public class LogicalLogger {
 			System.out.print(">: ");
 			String configFileName = in.next();
 			try {
-				ConfigParser configParser = new ConfigParser(configFileName, null);
+				ConfigFileParser configParser = new ConfigFileParser(configFileName, null);
 				int port = configParser.getLoggerPort();
-				listenerSocket = new ServerSocket(port);
+				startListenerThread(new ServerSocket(port));
 				System.out.println("Log server is running at port " + port);
 				break;
 			} catch (Exception e) {
 				System.out.println("Could not load config file. " + e);
 			}
 		}
-		startListenerThread();
 		System.out.println("Available commands: print, exit");
 		System.out.print(">: ");
 		String command;
@@ -147,7 +146,6 @@ public class LogicalLogger {
 				System.out.println("Available commands: print, exit");
 			System.out.print(">: ");
 		}
-		listenerSocket.close();
 		in.close();
 		System.out.println("LogicalLogger terminated normally");
 	}

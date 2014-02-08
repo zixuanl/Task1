@@ -9,7 +9,7 @@ public class VectorClock extends ClockService {
 	private Integer index= null;
 	private Semaphore mutex = new Semaphore(1);
 	
-	VectorClock(int sum, int index){
+	public VectorClock(int sum, int index){
 		sumProc = sum;
 		this.index = index;
 		array = new ArrayList<Integer>();
@@ -36,7 +36,6 @@ public class VectorClock extends ClockService {
 
 	@Override
 	public void updateTime(Object timeStamp) {
-		// TODO Auto-generated method stub
 		ArrayList<Integer> newTime = (ArrayList<Integer>) timeStamp;
 		try {
 			mutex.acquire();

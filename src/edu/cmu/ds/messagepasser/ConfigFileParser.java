@@ -5,13 +5,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-
 import org.yaml.snakeyaml.Yaml;
 
 import edu.cmu.ds.messagepasser.model.Node;
 import edu.cmu.ds.messagepasser.model.Rule;
 
-public class ConfigParser {
+public class ConfigFileParser {
 
 	private Node loggerNode;
 	private ArrayList<Node> peerNodes = new ArrayList<Node>();
@@ -19,7 +18,9 @@ public class ConfigParser {
 	private Node localNode;
 	private Integer localNodeIndex = 0;
 
-	public ConfigParser(String configurationFileName, String localName) throws FileNotFoundException {
+	@SuppressWarnings("unchecked")
+	public ConfigFileParser(String configurationFileName, String localName)
+			throws FileNotFoundException {
 
 		InputStream input = new FileInputStream(new File(configurationFileName));
 		Yaml yaml = new Yaml();
@@ -29,41 +30,46 @@ public class ConfigParser {
 		setUpLogger(configMap);
 		sendRules = parseRules(configMap, "sendRules");
 		receiveRules = parseRules(configMap, "receiveRules");
-		
+
 	}
-	
+
 	/**
 	 * Read configuration map loaded from file, and set up local and peer nodes
+	 * 
 	 * @param configMap
 	 * @param localName
 	 */
+	@SuppressWarnings("unchecked")
 	private void setUpNodes(Map<String, Object> configMap, String localName) {
-		List<Object> confs = (List<Object>) configMap.get("configuration");
+		List<Object> configurationList = (List<Object>) configMap.get("configuration");
 		int nodeIndex = 0;
-		for (Object c: confs) {
-			Map<String, Object> conf = (Map<String, Object>) c;
-			if (!conf.get("name").equals(localName)) {
-				Node n = new Node((String) conf.get("name"), (String) conf.get("ip"),
-						new Integer((String) conf.get("port")));
-				peerNodes.add(n);
+		for (Object c : configurationList) {
+			Map<String, Object> configEntry = (Map<String, Object>) c;
+			if (!configEntry.get("name").equals(localName)) {
+				Node node = new Node(configEntry.get("name").toString(), configEntry.get("ip")
+						.toString(), new Integer(configEntry.get("port").toString()));
+				peerNodes.add(node);
 			} else {
-				localNode = new Node((String) conf.get("name"), (String) conf.get("ip"),
-						new Integer((String) conf.get("port")));
+				localNode = new Node(configEntry.get("name").toString(), configEntry.get("ip")
+						.toString(), new Integer(configEntry.get("port").toString()));
 				localNodeIndex = nodeIndex;
 			}
 			nodeIndex++;
 		}
 	}
-	
+
 	/**
 	 * Read configuration map loaded from file, and set up logger
+	 * 
 	 * @param configMap
 	 */
+	@SuppressWarnings("unchecked")
 	private void setUpLogger(Map<String, Object> configMap) {
-		List<Object> confs = (List<Object>) configMap.get("logger");
-		if (confs != null && !confs.isEmpty()) {
-			Map<String, Object> conf = (Map<String, Object>) confs.get(0);
-			loggerNode = new Node("", (String) conf.get("ip"), new Integer((String) conf.get("port")));
+		List<Object> loggerList = (List<Object>) configMap.get("logger");
+		if (loggerList != null && !loggerList.isEmpty()) {
+			Map<String, Object> loggerEntry = (Map<String, Object>) loggerList.get(0);
+			loggerNode = new Node("", loggerEntry.get("ip").toString(), new Integer(loggerEntry
+					.get("port").toString()));
 		} else {
 			throw new RuntimeException("Cannot find config for logger");
 		}
@@ -71,44 +77,46 @@ public class ConfigParser {
 
 	/**
 	 * Universal rule parser. Read configuration map loaded from file.
+	 * 
 	 * @param configMap
-	 * @param ruleType sendRules or receiveRules
+	 * @param ruleType
+	 *            sendRules or receiveRules
 	 * @return List of rules depending on type
 	 * @throws FileNotFoundException
 	 */
+	@SuppressWarnings("unchecked")
 	private ArrayList<Rule> parseRules(Map<String, Object> configMap, String ruleType)
 			throws FileNotFoundException {
-		ArrayList<Rule> rules = new ArrayList<Rule>();
-		
-		List<Object> listRules = (List<Object>) configMap.get(ruleType);
-		rules = new ArrayList<Rule>();
-		for (Object s : listRules) {
-			Map<String, Object> listRule = (Map<String, Object>) s;
+		ArrayList<Rule> result = new ArrayList<Rule>();
+
+		List<Object> ruleList = (List<Object>) configMap.get(ruleType);
+		for (Object r : ruleList) {
+			Map<String, Object> ruleEntry = (Map<String, Object>) r;
 			String src = null;
 			String dest = null;
 			String kind = null;
 			Integer seqNum = null;
 			Boolean dup = null;
-			if (listRule.get("src") != null)
-				src = listRule.get("src").toString();
-			if (listRule.get("dest") != null)
-				dest = listRule.get("dest").toString();
-			if (listRule.get("kind") != null)
-				kind = listRule.get("kind").toString();
-			if (listRule.get("seqNum") != null)
-				seqNum = Integer.parseInt(listRule.get("seqNum").toString());
-			if (listRule.get("duplicate") != null)
-				dup = Boolean.parseBoolean(listRule.get("duplicate").toString());
-			Rule r = new Rule(listRule.get("action").toString(), src, dest, kind, seqNum, dup);
-			rules.add(r);
+			if (ruleEntry.get("src") != null)
+				src = ruleEntry.get("src").toString();
+			if (ruleEntry.get("dest") != null)
+				dest = ruleEntry.get("dest").toString();
+			if (ruleEntry.get("kind") != null)
+				kind = ruleEntry.get("kind").toString();
+			if (ruleEntry.get("seqNum") != null)
+				seqNum = Integer.parseInt(ruleEntry.get("seqNum").toString());
+			if (ruleEntry.get("duplicate") != null)
+				dup = Boolean.parseBoolean(ruleEntry.get("duplicate").toString());
+			Rule rule = new Rule(ruleEntry.get("action").toString(), src, dest, kind, seqNum, dup);
+			result.add(rule);
 		}
-		return rules;
+		return result;
 	}
 
 	public String getLoggerIp() {
 		return loggerNode.getIp();
 	}
-	
+
 	public int getLoggerPort() {
 		return loggerNode.getPort();
 	}
@@ -124,11 +132,11 @@ public class ConfigParser {
 	public Node getLocalNode() {
 		return localNode;
 	}
-	
+
 	public ArrayList<Rule> getSendRules() {
 		return sendRules;
 	}
-	
+
 	public ArrayList<Rule> getReceiveRules() {
 		return receiveRules;
 	}
