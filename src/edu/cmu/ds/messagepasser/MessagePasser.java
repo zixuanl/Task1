@@ -41,6 +41,7 @@ public class MessagePasser {
 	private boolean willTerminate = false;
 	private boolean isLogicalClock;
 	private Integer localNodeIndex;
+	private Integer localPort;
 	private String loggerIp = null;
 	private Integer loggerPort = null;
 	private ClockService clockService = null;
@@ -58,15 +59,7 @@ public class MessagePasser {
 		this.loggerIp = parser.getLoggerIp();
 		this.loggerPort = parser.getLoggerPort();
 		this.localNodeIndex = parser.getLocalNodeIndex();
-
-		setClockService(isLogicalClock, (peerNodeList.size() + 1), localNodeIndex);
-		try {
-			this.listenerSocket = new ServerSocket(parser.getLocalNode().getPort());
-			startListenerThread(); // setUp the initial connection
-			startMessageReceiverThread(); // create receive
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		this.localPort = parser.getLocalNode().getPort();
 	}
 
 	/**
@@ -82,26 +75,30 @@ public class MessagePasser {
 			System.out.println("Using vector clock");
 	}
 
-	public void setIsLogicalClock(boolean isLogicalClock) {
-		this.isLogicalClock = isLogicalClock;
+	public void useLogicalClock(boolean trueOfFalse) {
+		this.isLogicalClock = trueOfFalse;
 	}
 
 	/**
-	 * Initiate the selected clock service
+	 * Start MessagePasser using the selected clock service
 	 * 
-	 * @param isLogical
+	 * @param isLogicalClock
 	 *            True if you want to use a logical clock. False if vector.
-	 * @param numberOfNodes
-	 *            Number of nodes (for vector clock only)
-	 * @param localNodeIndex
-	 *            Local node's index (for vector clock only)
 	 */
-	public void setClockService(boolean isLogical, int numberOfNodes, int localNodeIndex) {
-		if (isLogical == true) {
+	public void start() {
+		if (isLogicalClock) {
 			clockService = new LogicalClock();
 		} else {
-			clockService = new VectorClock(numberOfNodes, localNodeIndex);
+			clockService = new VectorClock(peerNodeList.size() + 1, localNodeIndex);
 		}
+		try {
+			this.listenerSocket = new ServerSocket(this.localPort);
+			startListenerThread(); // setUp the initial connection
+			startMessageReceiverThread(); // create receive
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		printInfo();
 	}
 
 	/**
@@ -193,13 +190,12 @@ public class MessagePasser {
 					System.out.print(tmp.get(i) + " ");
 				}
 				System.out.println(")");
-
 			}
 		}
 
 		ObjectOutputStream ot;
 		Socket socket;
-		boolean isDupe = false;
+		boolean isDuplicate = false;
 		try {
 			if (!clientOutputPool.containsKey(message.getDestination())) {
 				socket = new Socket(peerNodeList.get(index).getIp(), peerNodeList.get(index)
@@ -207,10 +203,11 @@ public class MessagePasser {
 				ObjectOutputStream ot_temp = new ObjectOutputStream(socket.getOutputStream());
 				clientSocketPool.put(message.getDestination(), socket);
 				clientOutputPool.put(message.getDestination(), ot_temp);
-				System.out.println("Connect to " + message.getDestination() + " is established");
+				System.out.println("Connection to " + message.getDestination()
+						+ " has been established.");
 			}
 		} catch (ConnectException e) {
-			System.out.println(message.getDestination() + " is not online!");
+			System.out.println(message.getDestination() + " is offline!");
 			return;
 		}
 		ot = clientOutputPool.get(message.getDestination());
@@ -221,17 +218,15 @@ public class MessagePasser {
 		if (r != null) {
 			String action = new String(r.getAction());
 			if (action.equals("drop")) {
-				System.out.println("Message has been dropped in send side");
+				System.out.println("Message has been dropped at the sender");
 				return;
 			}
 			if (action.equals("duplicate")) {
-
-				System.out.println("Message has been duped in send side");
-				isDupe = true;
-
+				System.out.println("Message has been duplicated at the sender");
+				isDuplicate = true;
 			}
 			if (action.equals("delay")) {
-				System.out.println("Message has been delayed in send side");
+				System.out.println("Message has been delayed at the sender");
 				sendDelayedBuffer.add(message);
 				return;
 			}
@@ -240,20 +235,17 @@ public class MessagePasser {
 		try {
 			ot.writeObject(message);
 			ot.flush();
-			if (isDupe == true) {
-				Message dup_message = new Message(message);
-				dup_message.setIsDuplicate(true);
-				ot.writeObject(dup_message);
+			if (isDuplicate == true) {
+				Message duplicateMessage = new Message(message);
+				duplicateMessage.setIsDuplicate(true);
+				ot.writeObject(duplicateMessage);
 				ot.flush();
-				isDupe = false;
+				isDuplicate = false;
 			}
-
 		} catch (SocketException e) {
-
 			clientSocketPool.remove(message.getDestination());
 			clientOutputPool.remove(message.getDestination());
-			System.out.println(message.getDestination() + " is not online!");
-
+			System.out.println(message.getDestination() + " is offline!");
 		}
 
 		while (!sendDelayedBuffer.isEmpty()) {
@@ -287,9 +279,7 @@ public class MessagePasser {
 			ot2 = clientOutputPool.get(new_message.getDestination());
 			ot2.writeObject(new_message);
 			ot2.flush();
-
 		}
-
 	}
 
 	/**
@@ -321,7 +311,8 @@ public class MessagePasser {
 			System.out.println("Message dup is  " + message.getIsDuplicate());
 			System.out.println("Message kind is " + message.getKind());
 			System.out.println("Message body is " + (String) (message.getData()));
-			System.out.print(COMMAND_PROMPT);
+			System.out.print(((isLogicalClock) ? "logical " : "vector ") + localName
+					+ COMMAND_PROMPT);
 		}
 	}
 
@@ -516,15 +507,15 @@ public class MessagePasser {
 			System.out.print(COMMAND_PROMPT);
 			clockType = input.readLine();
 			if ("logical".equals(clockType)) {
-				messagePasser.setIsLogicalClock(true);
+				messagePasser.useLogicalClock(true);
 				break;
 			} else if ("vector".equals(clockType)) {
-				messagePasser.setIsLogicalClock(false);
+				messagePasser.useLogicalClock(false);
 				break;
 			}
 		}
+		messagePasser.start();
 
-		messagePasser.printInfo();
 		System.out.println("Please enter 'send' or 'exit' or 'mark'");
 		System.out.print(clockType + " " + localName + COMMAND_PROMPT);
 		String command;

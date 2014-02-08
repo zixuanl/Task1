@@ -7,6 +7,7 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Scanner;
@@ -17,7 +18,7 @@ import edu.cmu.ds.messagepasser.model.TimeStampedMessage;
 
 public class LogicalLogger {
 
-	public static Queue<TimeStampedMessage> loggedMessages;
+	public static Queue<TimeStampedMessage> information;
 	private static Semaphore mutex = new Semaphore(1);
 
 	/**
@@ -69,7 +70,7 @@ public class LogicalLogger {
 						if (message == null)
 							continue;
 						mutex.acquire();
-						loggedMessages.add(message);
+						information.add(message);
 						mutex.release();
 					}
 				} catch (IOException e) {
@@ -83,20 +84,16 @@ public class LogicalLogger {
 		}).start();
 	}
 
-	public static void printLoggedMessages() throws InterruptedException {
+	public static void printInformation() throws InterruptedException {
 		mutex.acquire();
-		if (loggedMessages.isEmpty()) {
+		if (information.isEmpty()) {
 			System.out.println("There is no logged messages.");
 		}
-		ArrayList<TimeStampedMessage> list = new ArrayList<TimeStampedMessage>();
-		for (int i = 0; i < loggedMessages.size(); i++) {
-			TimeStampedMessage message = loggedMessages.poll();
-			list.add(message);
+		Iterator<TimeStampedMessage> iter = information.iterator();
+		while (iter.hasNext()) {
+			TimeStampedMessage message = iter.next();
 			System.out.println(message.getSource() + " to " + message.getDestination() + " "
-					+ message.getSequenceNumber() + " " + (Integer) message.getTimeStamp());
-		}
-		for (int i = 0; i < list.size(); i++) {
-			loggedMessages.add(list.get(i));
+			+ message.getSequenceNumber() + " " + message.getTimeStamp());
 		}
 		mutex.release();
 	}
@@ -117,7 +114,7 @@ public class LogicalLogger {
 			}
 		};
 
-		loggedMessages = new PriorityQueue<TimeStampedMessage>(100, logicalComparator);
+		information = new PriorityQueue<TimeStampedMessage>(100, logicalComparator);
 
 		Scanner in = new Scanner(System.in);
 		while (true) {
@@ -141,13 +138,14 @@ public class LogicalLogger {
 			if (command.equals("exit"))
 				break;
 			else if (command.equals("print"))
-				printLoggedMessages();
+				printInformation();
 			else
 				System.out.println("Available commands: print, exit");
 			System.out.print("LogicalLogger>: ");
 		}
 		in.close();
 		System.out.println("LogicalLogger terminated normally");
+		System.exit(0);
 	}
 
 }

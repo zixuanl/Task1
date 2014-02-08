@@ -15,7 +15,7 @@ import edu.cmu.ds.messagepasser.model.TimeStampedMessage;
 
 public class VectorLogger {
 
-	public static Vector<TimeStampedMessage> loggedMessages = new Vector<TimeStampedMessage>();
+	public static Vector<TimeStampedMessage> information = new Vector<TimeStampedMessage>();
 	private static Semaphore mutex = new Semaphore(1);
 
 	/**
@@ -67,7 +67,7 @@ public class VectorLogger {
 						if (message == null)
 							continue;
 						mutex.acquire();
-						loggedMessages.add(message);
+						information.add(message);
 						mutex.release();
 					}
 				} catch (IOException e) {
@@ -83,9 +83,9 @@ public class VectorLogger {
 
 	public static String compare(int a, int b) {
 		@SuppressWarnings("unchecked")
-		ArrayList<Integer> m1 = (ArrayList<Integer>) loggedMessages.get(a).getTimeStamp();
+		ArrayList<Integer> m1 = (ArrayList<Integer>) information.get(a).getTimeStamp();
 		@SuppressWarnings("unchecked")
-		ArrayList<Integer> m2 = (ArrayList<Integer>) loggedMessages.get(b).getTimeStamp();
+		ArrayList<Integer> m2 = (ArrayList<Integer>) information.get(b).getTimeStamp();
 		int length = m1.size();
 
 		boolean check = true;
@@ -116,14 +116,14 @@ public class VectorLogger {
 
 	}
 
-	public static void printLoggedMessages() throws InterruptedException {
+	public static void printInformation() throws InterruptedException {
 
 		mutex.acquire();
-		if (loggedMessages.isEmpty()) {
+		if (information.isEmpty()) {
 			System.out.println("There is no logged messages.");
 		}
-		for (int i = 0; i < loggedMessages.size(); i++) {
-			TimeStampedMessage e = loggedMessages.get(i);
+		for (int i = 0; i < information.size(); i++) {
+			TimeStampedMessage e = information.get(i);
 			@SuppressWarnings("unchecked")
 			ArrayList<Integer> list = (ArrayList<Integer>) e.getTimeStamp();
 
@@ -137,14 +137,14 @@ public class VectorLogger {
 		}
 
 		System.out.print(0);
-		for (int i = 1; i < loggedMessages.size(); i++) {
+		for (int i = 1; i < information.size(); i++) {
 			System.out.print(compare(i - 1, i));
 			System.out.print(i);
 		}
 		System.out.println("");
 
-		for (int i = 0; i < loggedMessages.size() - 1; i++) {
-			for (int j = i + 1; j < loggedMessages.size(); j++) {
+		for (int i = 0; i < information.size() - 1; i++) {
+			for (int j = i + 1; j < information.size(); j++) {
 				String temp = compare(i, j);
 				if (temp.equals(" -> "))
 					System.out.println(i + compare(i, j) + j);
@@ -182,7 +182,7 @@ public class VectorLogger {
 			if (command.equals("exit"))
 				break;
 			else if (command.equals("print"))
-				printLoggedMessages();
+				printInformation();
 			else
 				System.out.println("Available commands: print, exit");
 			System.out.print("VectorLogger>: ");

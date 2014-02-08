@@ -8,7 +8,7 @@ public class TimeStampedMessage extends Message {
 	private Object timeStamp = null;
 
 	public TimeStampedMessage(String destination, String kind, Object body) {
-		super(destination,  kind,  body);
+		super(destination, kind, body);
 	}
 
 	public Object getTimeStamp() {
@@ -18,6 +18,12 @@ public class TimeStampedMessage extends Message {
 	public void setTimeStamp(Object timeStamp) {
 		this.timeStamp = timeStamp;
 	}
-	
-	
+
+	@Override
+	public String toString() {
+		return "TimeStampedMessage[timeStamp=" + timeStamp + ", sequenceNumber="
+				+ getSequenceNumber() + ", " + getSource() + "->" + getDestination() + ", kind="
+				+ getKind();
+	}
+
 }
