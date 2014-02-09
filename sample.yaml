@@ -25,7 +25,7 @@ groups :
       - alice
       - bob
       - charlie
-  - name : Group 2
+  - name : Group2
     members :
       - daphnie
       - bob

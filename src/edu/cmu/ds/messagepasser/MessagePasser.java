@@ -1,5 +1,6 @@
 package edu.cmu.ds.messagepasser;
 
+import java.util.List;
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -10,6 +11,7 @@ import java.net.ConnectException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -42,12 +44,13 @@ public class MessagePasser {
 	private boolean isLogicalClock;
 	private Integer localNodeIndex;
 	private Integer localPort;
+	private String localIp = null;
 	private String loggerIp = null;
 	private Integer loggerPort = null;
 	private ClockService clockService = null;
+	private Map<String, List<String>> Group_info = null;
 
-	public MessagePasser(String configuration_filename, String local_name)
-			throws FileNotFoundException {
+	public MessagePasser(String configuration_filename, String local_name) throws FileNotFoundException {
 		this.configurationFileName = configuration_filename;
 		this.localName = local_name;
 
@@ -60,6 +63,9 @@ public class MessagePasser {
 		this.loggerPort = parser.getLoggerPort();
 		this.localNodeIndex = parser.getLocalNodeIndex();
 		this.localPort = parser.getLocalNode().getPort();
+		this.localIp = parser.getLocalNode().getIp();
+		this.Group_info = parser.getGroupInfo();		
+		
 	}
 
 	/**
@@ -73,8 +79,15 @@ public class MessagePasser {
 			System.out.println("Using logical clock");
 		else
 			System.out.println("Using vector clock");
+		for (int i = 1; i <= Group_info.size(); i++)
+			System.out.println("Group" + i + " is " + Group_info.get("Group" + String.valueOf(i)));
 	}
 
+	public Map<String, List<String>>  getGroupInfo() {
+		return Group_info;
+	}
+	
+	
 	public void useLogicalClock(boolean trueOfFalse) {
 		this.isLogicalClock = trueOfFalse;
 	}
@@ -161,26 +174,25 @@ public class MessagePasser {
 		socket.close();
 
 	}
-
+	
 	/**
-	 * Send a message to destination
-	 * 
+	 * Multicast a message to group
+	 *
+	 * @param GroupList (List<String>)
 	 * @param message
-	 * @param index
 	 * @throws IOException
 	 */
-	public void send(Message message, int index) throws IOException {
-
+	public void multicast(List<String> GroupList, Message message) throws IOException {
 		if (message instanceof TimeStampedMessage) {
 			if (isLogicalClock == true) {
 				/*
-				 * Send logical
+				 * Multicast logical
 				 */
 				((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
 				System.out.println(clockService.getTimeStamp());
 			} else {
 				/*
-				 * Send vector
+				 * Multicast vector
 				 */
 				((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
 				@SuppressWarnings("unchecked")
@@ -192,7 +204,56 @@ public class MessagePasser {
 				System.out.println(")");
 			}
 		}
+		
+		message.setSource(localName);		
+		message.setSequenceNumber(sequenceNumber.addAndGet(1));
+		
+		for (int i = 0; i < GroupList.size(); i++) {
+			Integer NodeIndex = getNodeIndex(GroupList.get(i));
+			message.setDestination(GroupList.get(i));
+			if (NodeIndex == null)
+				NodeIndex = -1;
+			send(message, NodeIndex, true);
+		}
+		
+		
+	}
+	
+	
+	
 
+	/**
+	 * Send a message to destination
+	 * 
+	 * @param message
+	 * @param index
+	 * @throws IOException
+	 */
+	public void send(Message message, int index, boolean isMulticast) throws IOException {
+
+		if (isMulticast == false)
+			if (message instanceof TimeStampedMessage) {
+				if (isLogicalClock == true) {
+					/*
+					 * Send logical
+					 */
+					((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
+					System.out.println(clockService.getTimeStamp());
+				} else {
+					/*
+					 * Send vector
+					 */
+					((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
+					@SuppressWarnings("unchecked")
+					ArrayList<Integer> tmp = (ArrayList<Integer>) clockService.getTimeStamp();
+					System.out.print(localName + ": current time stampe is ( ");
+					for (int i = 0; i < tmp.size(); i++) {
+						System.out.print(tmp.get(i) + " ");
+					}
+					System.out.println(")");
+				}
+			}
+	
 		ObjectOutputStream ot;
 		Socket socket;
 		boolean isDuplicate = false;
@@ -211,9 +272,10 @@ public class MessagePasser {
 			return;
 		}
 		ot = clientOutputPool.get(message.getDestination());
-
-		message.setSource(localName);
-		message.setSequenceNumber(sequenceNumber.addAndGet(1));
+		if (isMulticast == false) {
+			message.setSource(localName);		
+			message.setSequenceNumber(sequenceNumber.addAndGet(1));
+		}
 		Rule r = checkSendRule(message);
 		if (r != null) {
 			String action = new String(r.getAction());
@@ -402,6 +464,21 @@ public class MessagePasser {
 			public void run() {
 				System.out.println("Local server is listening on port "
 						+ listenerSocket.getLocalPort());
+			
+				Socket socket_local;
+				ObjectOutputStream ot_temp;
+				try {
+					socket_local = new Socket(localIp, localPort);
+					ot_temp = new ObjectOutputStream(socket_local.getOutputStream());
+					clientSocketPool.put(localName, socket_local);
+					clientOutputPool.put(localName, ot_temp);
+				} catch (UnknownHostException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				} catch (IOException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
 				try {
 					while (!willTerminate) {
 						Socket socket = listenerSocket.accept();
@@ -515,8 +592,11 @@ public class MessagePasser {
 			}
 		}
 		messagePasser.start();
-
-		System.out.println("Please enter 'send' or 'exit' or 'mark'");
+		
+		
+		
+		
+		System.out.println("Please enter 'send' or 'exit' or 'mark' or 'multicast'");
 		System.out.print(clockType + " " + localName + COMMAND_PROMPT);
 		String command;
 		while ((command = input.readLine()) != null) {
@@ -555,12 +635,17 @@ public class MessagePasser {
 
 				// Check destination
 				Integer nodeIndex = messagePasser.getNodeIndex(destination);
-				if (nodeIndex == null) {
+				if (nodeIndex == null && !destination.equals(localName)) {
 					System.out.println("Invalid destination");
 				} else {
 					// Create and send a time stamped message
 					Message message = new TimeStampedMessage(destination, kind, messageBody);
-					messagePasser.send(message, nodeIndex);
+					
+					//if nodeIndex == null, it means send to itself
+					//socket has been established at the init of messagePasser 
+					if (nodeIndex == null)
+						nodeIndex = -1;
+					messagePasser.send(message, nodeIndex, false);
 					if (mustLog) {
 						messagePasser.sendLog(message);
 					}
@@ -575,9 +660,39 @@ public class MessagePasser {
 																	// care
 																	// this.
 				messagePasser.mark(markMessage);
-			}
+			} else if (command.equals("multicast")) {
+				String GroupName = null;
+				String MulticastBody = null;
+				do {
+					System.out.println("Please specify the Group_name: usage <Group><1>");
+					System.out.print(localName + COMMAND_PROMPT);
+					GroupName = input.readLine();
+				} while (!messagePasser.getGroupInfo().containsKey(GroupName));
+				
+				if (!messagePasser.getGroupInfo().get(GroupName).contains(localName)) {
+					System.out.println("You are not in this Group");
+				} else {
 
-			System.out.println("Please enter 'send' or 'exit' or 'mark'");
+					System.out.println("Please enter the Multicast body");
+					System.out.print(localName + COMMAND_PROMPT);
+					MulticastBody = input.readLine();
+					String logInfo;
+					do {
+						System.out.println("Do you want log this message? (y/n)");
+						System.out.print(localName + COMMAND_PROMPT);
+						logInfo = input.readLine();
+					} while (!logInfo.equals("y") && !logInfo.equals("n"));
+					boolean mustLog = (logInfo.toLowerCase().equals("y"));
+					Message MultiMessage = new TimeStampedMessage(GroupName, "multicast", MulticastBody);
+					messagePasser.multicast(messagePasser.getGroupInfo().get(GroupName), MultiMessage);
+					if (mustLog) {
+						MultiMessage.setDestination(GroupName);
+						messagePasser.sendLog(MultiMessage);
+					}
+				}
+				
+			}
+			System.out.println("Please enter 'send' or 'exit' or 'mark' or 'multicast'");
 			System.out.print(clockType + " " + localName + COMMAND_PROMPT);
 		}
 		input.close();

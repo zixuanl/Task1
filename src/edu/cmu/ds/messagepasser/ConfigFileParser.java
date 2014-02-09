@@ -162,7 +162,8 @@ public class ConfigFileParser {
 		return receiveRules;
 	}
 	
-	public List<String> getGroupMembers(String groupName) {
-		return groups.get(groupName);
+	
+	public Map<String, List<String>> getGroupInfo() {
+		return groups;
 	}
 }
