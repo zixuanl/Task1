@@ -15,6 +15,7 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -34,6 +35,7 @@ public class MessagePasser {
 	private ConcurrentLinkedQueue<Message> receiveBuffer = new ConcurrentLinkedQueue<Message>();
 	private ConcurrentLinkedQueue<Message> receiveDelayedBuffer = new ConcurrentLinkedQueue<Message>();
 	private ConcurrentLinkedQueue<Message> sendDelayedBuffer = new ConcurrentLinkedQueue<Message>();
+	private ArrayList<String> ReceivedMulticast = new ArrayList<String>();
 	private ArrayList<Rule> receiveRuleList;
 	private ArrayList<Rule> sendRuleList;
 	private ArrayList<Node> peerNodeList;
@@ -49,6 +51,7 @@ public class MessagePasser {
 	private Integer loggerPort = null;
 	private ClockService clockService = null;
 	private Map<String, List<String>> Group_info = null;
+	private Integer MulticastIndex;
 
 	public MessagePasser(String configuration_filename, String local_name) throws FileNotFoundException {
 		this.configurationFileName = configuration_filename;
@@ -64,7 +67,8 @@ public class MessagePasser {
 		this.localNodeIndex = parser.getLocalNodeIndex();
 		this.localPort = parser.getLocalNode().getPort();
 		this.localIp = parser.getLocalNode().getIp();
-		this.Group_info = parser.getGroupInfo();		
+		this.Group_info = parser.getGroupInfo();	
+		this.MulticastIndex = -1;
 		
 	}
 
@@ -82,10 +86,27 @@ public class MessagePasser {
 		for (int i = 1; i <= Group_info.size(); i++)
 			System.out.println("Group" + i + " is " + Group_info.get("Group" + String.valueOf(i)));
 	}
-
+	
+	/**
+	 * @return Group_info Map
+	 */
 	public Map<String, List<String>>  getGroupInfo() {
 		return Group_info;
 	}
+	
+	
+	public Integer IncAndGetMulticastIndex () {
+		MulticastIndex++;
+		return MulticastIndex;
+		
+	}
+	
+	/**
+	 * @ returen whether a multicast message has been received
+	 * 
+	 */
+	
+	
 	
 	
 	public void useLogicalClock(boolean trueOfFalse) {
@@ -137,7 +158,7 @@ public class MessagePasser {
 	}
 
 	/**
-	 * Increment local timestamp and send a message only to the logger
+	 * Increment local Timestamp and send a message only to the logger
 	 * 
 	 * @param message
 	 * @throws IOException
@@ -207,7 +228,6 @@ public class MessagePasser {
 		
 		message.setSource(localName);		
 		message.setSequenceNumber(sequenceNumber.addAndGet(1));
-		
 		for (int i = 0; i < GroupList.size(); i++) {
 			Integer NodeIndex = getNodeIndex(GroupList.get(i));
 			message.setDestination(GroupList.get(i));
@@ -215,7 +235,6 @@ public class MessagePasser {
 				NodeIndex = -1;
 			send(message, NodeIndex, true);
 		}
-		
 		
 	}
 	
@@ -229,9 +248,9 @@ public class MessagePasser {
 	 * @param index
 	 * @throws IOException
 	 */
-	public void send(Message message, int index, boolean isMulticast) throws IOException {
+	public void send(Message message, int index, boolean isGroup) throws IOException {
 
-		if (isMulticast == false)
+		if (isGroup == false)
 			if (message instanceof TimeStampedMessage) {
 				if (isLogicalClock == true) {
 					/*
@@ -272,10 +291,11 @@ public class MessagePasser {
 			return;
 		}
 		ot = clientOutputPool.get(message.getDestination());
-		if (isMulticast == false) {
+		if (isGroup == false) {
 			message.setSource(localName);		
 			message.setSequenceNumber(sequenceNumber.addAndGet(1));
 		}
+		
 		Rule r = checkSendRule(message);
 		if (r != null) {
 			String action = new String(r.getAction());
@@ -412,6 +432,7 @@ public class MessagePasser {
 						message = (Message) is.readObject();
 						if (message == null)
 							continue;
+						
 						Rule rule = checkReceiveRule(message);
 						if (rule != null) {
 							String action = new String(rule.getAction());
@@ -432,16 +453,57 @@ public class MessagePasser {
 								continue;
 							}
 						}
-						receiveBuffer.add(message);
+						
+						
+						//Receive the multicast message 
+						if (message.getKind().equals("multicast")) {
+							if (!ReceivedMulticast.contains((String)message.getData())) {
+								ReceivedMulticast.add((String)message.getData());
+								if (!(message.getSource().equals(localName))){
+									// To retrieve the GroupName in the Multicast body
+									String[] temp  = ((String)message.getData()).split(" ");
+									String GroupName = temp[8];
+									System.out.println("I receive Multicast from " + message.getSource());
+									System.out.println("I am going to Multicast to the group again");
+									multicast(getGroupInfo().get(GroupName), message);
+								}
+								receiveBuffer.add(message);
+							
+							} else {
+								//if received just continue
+								continue;
+							}
+						} else {
+							//normal message, just to upper application
+							receiveBuffer.add(message);
+						}
+						
+						
 						if (isDuplicate == true) {
 							Message dup_message = new Message(message);
 							dup_message.setIsDuplicate(true);
-							receiveBuffer.add(dup_message);
-							isDuplicate = false;
+							//Receive the multicast message 
+							//If the dupe message is a multicast one, it must be received before
+							//We just drop it 
+							if (!message.getKind().equals("multicast")) {
+								receiveBuffer.add(dup_message);
+								isDuplicate = false;
+							} else {
+								isDuplicate = false;
+							}
 						}
+						
+						
 						while (!receiveDelayedBuffer.isEmpty() && !willTerminate) {
+							// It is the delay buffer
+							// I think sth should be added here 
+							// to realize the causal ordering
+							
 							receiveBuffer.add(receiveDelayedBuffer.poll());
 						}
+						
+						
+						
 					}
 				} catch (Exception e) {
 					return;
@@ -473,10 +535,8 @@ public class MessagePasser {
 					clientSocketPool.put(localName, socket_local);
 					clientOutputPool.put(localName, ot_temp);
 				} catch (UnknownHostException e1) {
-					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				} catch (IOException e1) {
-					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				}
 				try {
@@ -672,10 +732,8 @@ public class MessagePasser {
 				if (!messagePasser.getGroupInfo().get(GroupName).contains(localName)) {
 					System.out.println("You are not in this Group");
 				} else {
-
-					System.out.println("Please enter the Multicast body");
-					System.out.print(localName + COMMAND_PROMPT);
-					MulticastBody = input.readLine();
+					MulticastBody = "This is a multicast sent from " + localName 
+									+ " to " + GroupName + " Index is " + messagePasser.IncAndGetMulticastIndex();
 					String logInfo;
 					do {
 						System.out.println("Do you want log this message? (y/n)");

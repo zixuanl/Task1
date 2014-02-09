@@ -38,11 +38,9 @@ logger :
 # This is the incoming port on which MP will listen
 # May be changed for further communication as usual
 sendRules :
-  - action : duplicate # Ack message number 4 from bob to alice will not be sent
+  - action : drop # Ack message number 4 from bob to alice will not be sent
     src    : alice
     dest   : bob
-    kind   : Ack
-    seqNum : 0
 
   - action : drop # Every Lookup message in the system will be delayed
     kind   : Lookup
