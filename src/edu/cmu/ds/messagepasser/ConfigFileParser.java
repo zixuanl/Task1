@@ -21,7 +21,7 @@ public class ConfigFileParser {
 	private ArrayList<Rule> sendRules, receiveRules;
 	private Node localNode;
 	private Integer localNodeIndex = 0;
-	private Map<String, List<String>> groups = new HashMap<String, List<String>>();
+	private Map<String, List<String>> groupMembers = new HashMap<String, List<String>>();
 
 	@SuppressWarnings("unchecked")
 	public ConfigFileParser(String configurationFileName, String localName)
@@ -75,7 +75,7 @@ public class ConfigFileParser {
 			Map<String, Object> groupEntry = (Map<String, Object>) g;
 			String name = groupEntry.get("name").toString();
 			List<String> members = (List<String>) groupEntry.get("members");
-			groups.put(name, members);
+			groupMembers.put(name, members);
 		}
 	}
 
@@ -163,7 +163,7 @@ public class ConfigFileParser {
 	}
 	
 	
-	public Map<String, List<String>> getGroupInfo() {
-		return groups;
+	public Map<String, List<String>> getGroupMembers() {
+		return groupMembers;
 	}
 }

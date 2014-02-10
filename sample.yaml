@@ -20,12 +20,12 @@ configuration :
     port : 15555
 
 groups :
-  - name : Group1
+  - name : group1
     members :
       - alice
       - bob
       - charlie
-  - name : Group2
+  - name : group2
     members :
       - daphnie
       - bob
@@ -43,12 +43,12 @@ sendRules :
     dest   : bob
 
   - action : drop # Every Lookup message in the system will be delayed
-    kind   : Lookup
+    kind   : lookup
 
   - action : delay # Every Lookup message in the system will be delayed
     src    : bob
     dest   : alice
-    kind   : Lookup
+    kind   : lookup
 
 receiveRules :
   - action : drop

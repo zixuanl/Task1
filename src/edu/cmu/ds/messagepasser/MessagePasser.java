@@ -1,6 +1,5 @@
 package edu.cmu.ds.messagepasser;
 
-import java.util.List;
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -14,8 +13,10 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -32,11 +33,11 @@ public class MessagePasser {
 	private static String commandPrompt = ">: ";
 	private String configurationFileName;
 	private String localName;
-	private AtomicInteger sequenceNumber = new AtomicInteger(-1);
-	private ConcurrentLinkedQueue<Message> receiveBuffer = new ConcurrentLinkedQueue<Message>();
-	private ConcurrentLinkedQueue<Message> receiveDelayedBuffer = new ConcurrentLinkedQueue<Message>();
-	private ConcurrentLinkedQueue<Message> sendDelayedBuffer = new ConcurrentLinkedQueue<Message>();
-	private ArrayList<String> ReceivedMulticast = new ArrayList<String>();
+	private AtomicInteger sequenceNumber = new AtomicInteger(0);
+	private ConcurrentLinkedQueue<TimeStampedMessage> receiveBuffer = new ConcurrentLinkedQueue<TimeStampedMessage>();
+	private ConcurrentLinkedQueue<TimeStampedMessage> receiveDelayedBuffer = new ConcurrentLinkedQueue<TimeStampedMessage>();
+	private ConcurrentLinkedQueue<TimeStampedMessage> sendDelayedBuffer = new ConcurrentLinkedQueue<TimeStampedMessage>();
+	private ArrayList<String> receivedMulticastMessageBody = new ArrayList<String>();
 	private ArrayList<Rule> receiveRuleList;
 	private ArrayList<Rule> sendRuleList;
 	private ArrayList<Node> peerNodeList;
@@ -51,9 +52,10 @@ public class MessagePasser {
 	private String loggerIp = null;
 	private int loggerPort;
 	private ClockService clockService = null;
-	private Map<String, List<String>> groupInfo = null;
-	// First multicast message's sequence number will be 0
-	private int multicastSequenceNumber = -1;
+	private Map<String, List<String>> groupMembers = null;
+	// First multicast message's sequence number will be 1
+	private int multicastSequenceNumber = 0;
+	private static final int MULTICAST_MESSAGE_GROUP_NAME_INDEX = 8;
 
 	public MessagePasser(String inConfigurationFilename, String inLocalName,
 			boolean inUseLogicalClock) throws FileNotFoundException {
@@ -71,7 +73,7 @@ public class MessagePasser {
 		this.localNodeIndex = parser.getLocalNodeIndex();
 		this.localPort = parser.getLocalNode().getPort();
 		this.localIp = parser.getLocalNode().getIp();
-		this.groupInfo = parser.getGroupInfo();
+		this.groupMembers = parser.getGroupMembers();
 
 		if (inUseLogicalClock) {
 			clockService = new LogicalClock();
@@ -99,12 +101,17 @@ public class MessagePasser {
 			System.out.println("Using logical clock");
 		else
 			System.out.println("Using vector clock");
-		for (int i = 1; i <= groupInfo.size(); i++)
-			System.out.println("Group" + i + " is " + groupInfo.get("Group" + String.valueOf(i)));
+
+		// List all groups and their members
+		Iterator<Entry<String, List<String>>> iter = groupMembers.entrySet().iterator();
+		while (iter.hasNext()) {
+			Entry<String, List<String>> group = iter.next();
+			System.out.println(group.getKey() + ": " + group.getValue().toString());
+		}
 	}
 
 	public Map<String, List<String>> getGroupInfo() {
-		return groupInfo;
+		return groupMembers;
 	}
 
 	private Integer incrementAndGetMulticastSequenceNumber() {
@@ -145,25 +152,23 @@ public class MessagePasser {
 	 */
 	public void mark(Message message) throws IOException {
 		if (useLogicalClock == true) {
+			/*
+			 * Mark logical
+			 */
 			((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
 			System.out.println(clockService.getTimeStamp());
 		} else {
-
+			/*
+			 * Mark vector
+			 */
 			((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
 			@SuppressWarnings("unchecked")
-			ArrayList<Integer> tmp = (ArrayList<Integer>) clockService.getTimeStamp();
-
-			System.out.print(localName + ": current time stampe is ( ");
-			for (int i = 0; i < tmp.size(); i++) {
-				System.out.print(tmp.get(i) + " ");
-			}
-			System.out.println(")");
-
+			ArrayList<Integer> timeStamp = (ArrayList<Integer>) clockService.getTimeStamp();
+			System.out.println(localName + ": current time stamp is " + timeStamp.toString());
 		}
-
 		Socket socket = null;
 		try {
-			socket = new Socket(loggerIp, 3333);
+			socket = new Socket(loggerIp, loggerPort);
 		} catch (ConnectException e) {
 			System.out.println("Couldn't connect to logger. Log info was not sent.");
 			return;
@@ -173,7 +178,6 @@ public class MessagePasser {
 		ot.flush();
 		ot.close();
 		socket.close();
-
 	}
 
 	/**
@@ -183,22 +187,23 @@ public class MessagePasser {
 	 * @param message
 	 * @throws IOException
 	 */
-	public void multicast(List<String> destinationNodeNames, Message message) throws IOException {
+	public void multicast(List<String> destinationNodeNames, TimeStampedMessage message) throws IOException {
 		if (message instanceof TimeStampedMessage) {
+			TimeStampedMessage tsm = (TimeStampedMessage) message;
 			if (useLogicalClock) {
 				/*
 				 * Multicast logical
 				 */
-				((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
+				tsm.setTimeStamp(clockService.getIncTimeStamp());
 				System.out.println(clockService.getTimeStamp());
 			} else {
 				/*
 				 * Multicast vector
 				 */
-				((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
+				tsm.setTimeStamp(clockService.getIncTimeStamp());
 				@SuppressWarnings("unchecked")
 				ArrayList<Integer> timeStamp = (ArrayList<Integer>) clockService.getTimeStamp();
-				System.out.println(localName + ": current time stampe is " + timeStamp.toString());
+				System.out.println(localName + ": current time stamp is " + timeStamp.toString());
 			}
 		}
 
@@ -236,7 +241,7 @@ public class MessagePasser {
 	 *            increment the global sequence number
 	 * @throws IOException
 	 */
-	public void send(Message message, int targetNodeIndex, boolean isMulticastMessage)
+	public void send(TimeStampedMessage message, int targetNodeIndex, boolean isMulticastMessage)
 			throws IOException {
 
 		/*
@@ -245,25 +250,27 @@ public class MessagePasser {
 		 */
 		if (!isMulticastMessage) {
 			if (message instanceof TimeStampedMessage) {
+				TimeStampedMessage tsm = (TimeStampedMessage) message;
 				if (useLogicalClock) {
 					/*
 					 * Send logical
 					 */
-					((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
+					tsm.setTimeStamp(clockService.getIncTimeStamp());
 					System.out.println(clockService.getTimeStamp());
 				} else {
 					/*
 					 * Send vector
 					 */
-					((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
+					tsm.setTimeStamp(clockService.getIncTimeStamp());
 					@SuppressWarnings("unchecked")
 					ArrayList<Integer> timeStamp = (ArrayList<Integer>) clockService.getTimeStamp();
-					System.out
-							.print(localName + ": current time stampe is " + timeStamp.toString());
+					System.out.println(localName + ": current time stamp is "
+							+ timeStamp.toString());
 				}
 			}
 		}
 
+		// Get a connection
 		ObjectOutputStream ot;
 		Socket socket;
 		try {
@@ -274,7 +281,7 @@ public class MessagePasser {
 				clientSocketPool.put(message.getDestination(), socket);
 				clientOutputPool.put(message.getDestination(), ot_temp);
 				System.out.println("Connection to " + message.getDestination()
-						+ " has been established.");
+						+ " established.");
 			}
 		} catch (ConnectException e) {
 			System.out.println(message.getDestination() + " is offline!");
@@ -282,8 +289,8 @@ public class MessagePasser {
 		}
 		ot = clientOutputPool.get(message.getDestination());
 
-		// If this is not a multicast message, increment global sequence number
-		// and set it
+		// If this is an ordinary message, increase and get sequence number
+		// Then assign it to the message
 		if (!isMulticastMessage) {
 			message.setSource(localName);
 			message.setSequenceNumber(sequenceNumber.addAndGet(1));
@@ -291,7 +298,7 @@ public class MessagePasser {
 
 		// Apply rule
 		Rule r = checkSendRule(message);
-		boolean mustDuplicate = false;
+		boolean willDuplicate = false;
 		if (r != null) {
 			String action = new String(r.getAction());
 			if (action.equals("drop")) {
@@ -307,7 +314,7 @@ public class MessagePasser {
 				 * delayed messages
 				 */
 				System.out.println("Message has been duplicated at the sender");
-				mustDuplicate = true;
+				willDuplicate = true;
 			}
 			if (action.equals("delay")) {
 				/*
@@ -325,7 +332,7 @@ public class MessagePasser {
 		try {
 			ot.writeObject(message);
 			ot.flush();
-			if (mustDuplicate) {
+			if (willDuplicate) {
 				Message duplicateMessage = new Message(message);
 				duplicateMessage.setIsDuplicate(true);
 				ot.writeObject(duplicateMessage);
@@ -380,31 +387,26 @@ public class MessagePasser {
 	 * Get a message from receiveBuffer and print it
 	 */
 	public void receive() {
-
 		if (receiveBuffer.peek() != null) {
 			System.out.println("");
-			Message message = receiveBuffer.poll();
-			if (message instanceof TimeStampedMessage) {
-				if (useLogicalClock == true) {
-					clockService.updateTime(((TimeStampedMessage) message).getTimeStamp());
-					System.out.println(clockService.getTimeStamp());
-				} else {
-					clockService.updateTime(((TimeStampedMessage) message).getTimeStamp());
-					@SuppressWarnings("unchecked")
-					ArrayList<Integer> tmp = (ArrayList<Integer>) clockService.getTimeStamp();
-					System.out.print(localName + ": current time stampe is ( ");
-					for (int i = 0; i < tmp.size(); i++) {
-						System.out.print(tmp.get(i) + " ");
-					}
-					System.out.println(")");
-				}
+			TimeStampedMessage message = receiveBuffer.poll();
+			if (useLogicalClock) {
+				/*
+				 * Receive logical
+				 */
+				clockService.updateTime(message.getTimeStamp());
+				System.out.println(clockService.getTimeStamp());
+			} else {
+				/*
+				 * Receive vector
+				 */
+				clockService.updateTime(message.getTimeStamp());
+				@SuppressWarnings("unchecked")
+				ArrayList<Integer> timeStamp = (ArrayList<Integer>) clockService.getTimeStamp();
+				System.out.println(localName + ": current time stamp is "+timeStamp.toString());
 			}
-
-			System.out.println("Received message from " + message.getSource());
-			System.out.println("Message seqNum is " + message.getSequenceNumber());
-			System.out.println("Message dup is  " + message.getIsDuplicate());
-			System.out.println("Message kind is " + message.getKind());
-			System.out.println("Message body is " + (String) (message.getData()));
+			System.out.println("\nDelivered message from " + message.getSource());
+			System.out.println(message);
 			System.out.print(commandPrompt);
 		}
 	}
@@ -437,10 +439,9 @@ public class MessagePasser {
 			public void run() {
 				try {
 					ObjectInputStream is = new ObjectInputStream(socket.getInputStream());
-					Message message;
-					boolean isDuplicate = false;
-					while (!willTerminate) {
-						message = (Message) is.readObject();
+					boolean willDuplicate = false;
+					while (true) {
+						TimeStampedMessage message = (TimeStampedMessage) is.readObject();
 						if (message == null)
 							continue;
 
@@ -448,60 +449,77 @@ public class MessagePasser {
 						if (rule != null) {
 							String action = new String(rule.getAction());
 							if (action.equals("drop")) {
-								System.out.println("Message has been dropped in receive side");
+								/*
+								 * Drop: drop the message and leave
+								 */
+								System.out.println("Message dropped at the receiver");
 								System.out.print(commandPrompt);
 								continue;
 							}
 							if (action.equals("duplicate")) {
-								isDuplicate = true;
-								System.out.println("Message has been duped in receive side");
+								/*
+								 * Duplicate: will duplicate the received
+								 * message and deliver all delayed received
+								 * messages
+								 */
+								willDuplicate = true;
+								System.out.println("Message duplicated at the receiver");
 								System.out.print(commandPrompt);
 							}
 							if (action.equals("delay")) {
-								System.out.println("Message has been delayed in receive side");
+								/*
+								 * Delay: put this in receive buffer then leave
+								 */
+								System.out.println("Message delayed at the receiver");
 								System.out.print(commandPrompt);
 								receiveDelayedBuffer.add(message);
 								continue;
 							}
 						}
 
-						// Receive the multicast message
+						/*
+						 * Handle multicast message: Check whether or not the
+						 * node has ever gotten the message. If not, remember
+						 * and deliver it. If it is not the sender of this
+						 * message, multicast it to the other group members.
+						 */
 						if (message.getKind().equals("multicast")) {
-							if (!ReceivedMulticast.contains((String) message.getData())) {
-								ReceivedMulticast.add((String) message.getData());
+							String messageBody = (String) message.getData();
+							if (!receivedMulticastMessageBody.contains(messageBody)) {
+								receivedMulticastMessageBody.add(messageBody);
 								if (!(message.getSource().equals(localName))) {
-									// To retrieve the GroupName in the
-									// Multicast body
-									String[] temp = ((String) message.getData()).split(" ");
-									String groupName = temp[8];
-									System.out.println("I receive Multicast from "
+									String groupName = messageBody.split(" ")[MULTICAST_MESSAGE_GROUP_NAME_INDEX];
+									System.out.println("\n\nReceived a multicast message from "
 											+ message.getSource());
-									System.out.println("I am going to Multicast to the group again");
-									multicast(groupInfo.get(groupName), message);
+									System.out.println("Multicasting it to members in " + groupName
+											+ "..");
+									multicast(groupMembers.get(groupName), message);
 								}
+								// Deliver this message
 								receiveBuffer.add(message);
-
 							} else {
-								// if received just continue
+								// If this message has been received before,
+								// ignore it then leave
 								continue;
 							}
 						} else {
-							// normal message, just to upper application
+							// Ordinary message. Just deliver it
 							receiveBuffer.add(message);
 						}
 
-						if (isDuplicate == true) {
-							Message dup_message = new Message(message);
-							dup_message.setIsDuplicate(true);
+						/*
+						 * Handle duplicate rule:
+						 */
+						if (willDuplicate) {
+							TimeStampedMessage duplicateMessage = new TimeStampedMessage(message);
+							duplicateMessage.setIsDuplicate(true);
 							// Receive the multicast message
 							// If the dupe message is a multicast one, it must
 							// be received before
 							// We just drop it
+							// TODO I don't get this.
 							if (!message.getKind().equals("multicast")) {
-								receiveBuffer.add(dup_message);
-								isDuplicate = false;
-							} else {
-								isDuplicate = false;
+								receiveBuffer.add(duplicateMessage);
 							}
 						}
 
@@ -549,7 +567,7 @@ public class MessagePasser {
 					e1.printStackTrace();
 				}
 				try {
-					while (!willTerminate) {
+					while (true) {
 						Socket socket = listenerSocket.accept();
 						startClientThread(socket);
 					}
@@ -705,7 +723,7 @@ public class MessagePasser {
 					System.out.println("Invalid destination");
 				} else {
 					// Create and send a time stamped message
-					Message message = new TimeStampedMessage(destination, kind, messageBody);
+					TimeStampedMessage message = new TimeStampedMessage(destination, kind, messageBody);
 
 					// if nodeIndex == null, it means send to itself
 					// socket has been established at the init of messagePasser
@@ -742,7 +760,7 @@ public class MessagePasser {
 					/*
 					 * Important: We use this message as a metadata for
 					 * multicasting. After split(" "), targetMulticastGroupName
-					 * will be at [8]
+					 * will be at [MULTICAST_MESSAGE_GROUP_NAME_INDEX]
 					 */
 					String multicastMessageBody = "This is a multicast sent from " + localName
 							+ " to " + targetMulticastGroupName + " MulticastSequenceNumber is "
@@ -754,7 +772,7 @@ public class MessagePasser {
 						logInfo = input.readLine();
 					} while (!logInfo.equals("y") && !logInfo.equals("n"));
 					boolean mustLog = (logInfo.toLowerCase().equals("y"));
-					Message multicastMessage = new TimeStampedMessage(targetMulticastGroupName,
+					TimeStampedMessage multicastMessage = new TimeStampedMessage(targetMulticastGroupName,
 							"multicast", multicastMessageBody);
 					messagePasser.multicast(
 							messagePasser.getGroupInfo().get(targetMulticastGroupName),
