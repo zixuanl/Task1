@@ -13,7 +13,9 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -30,8 +32,8 @@ import edu.cmu.ds.messagepasser.model.TimeStampedMessage;
 
 public class MessagePasser {
 	private static final String DEFAULT_CONFIG_FILENAME = "sample.yaml";
-	private static final int MULTICAST_MESSAGE_MULTICASTER_NODE_INDEX = 3;
-	private static final int MULTICAST_MESSAGE_GROUP_NAME_INDEX = 5;
+	private static final int MULTICAST_MSG_MULTICASTER_NAME_INDEX = 3;
+	private static final int MULTICAST_MSG_GROUP_NAME_INDEX = 5;
 	private static String commandPrompt = ">: ";
 	private String configurationFileName;
 	private String localName;
@@ -39,8 +41,8 @@ public class MessagePasser {
 	private ConcurrentLinkedQueue<TimeStampedMessage> receiveBuffer = new ConcurrentLinkedQueue<TimeStampedMessage>();
 	private ConcurrentLinkedQueue<TimeStampedMessage> receiveDelayedBuffer = new ConcurrentLinkedQueue<TimeStampedMessage>();
 	private ConcurrentLinkedQueue<TimeStampedMessage> sendDelayedBuffer = new ConcurrentLinkedQueue<TimeStampedMessage>();
-	private ConcurrentLinkedQueue<TimeStampedMessage> holdBackQueue = new ConcurrentLinkedQueue<TimeStampedMessage>();
-	private ArrayList<String> receivedMulticastMessageBody = new ArrayList<String>();
+	private LinkedList<TimeStampedMessage> holdBackQueue = new LinkedList<TimeStampedMessage>();
+	private HashSet<String> receivedMulticastMessageBody = new HashSet<String>();
 	private ArrayList<Rule> receiveRuleList;
 	private ArrayList<Rule> sendRuleList;
 	private ArrayList<Node> peerNodeList;
@@ -77,7 +79,7 @@ public class MessagePasser {
 		this.localIp = parser.getLocalNode().getIp();
 		this.groupMembers = parser.getGroupMembers();
 
-		if (inUseLogicalClock) {
+		if (this.useLogicalClock) {
 			clockService = new LogicalClock();
 		} else {
 			clockService = new VectorClock(peerNodeList.size() + 1, localNodeIndex);
@@ -184,6 +186,10 @@ public class MessagePasser {
 	 */
 	public void multicast(List<String> destinationNodeNames, TimeStampedMessage message)
 			throws IOException {
+		if (!(clockService instanceof VectorClock)) {
+			System.out.println("Please use vector clock to use multicast.");
+			return;
+		}
 		message.setTimeStamp(clockService.getIncTimeStamp());
 		System.out
 				.println("Current " + localName + "'s time stamp: " + clockService.getTimeStamp());
@@ -437,30 +443,66 @@ public class MessagePasser {
 							 */
 							String messageBody = (String) message.getData();
 							// This is R-deliver
-							if (!receivedMulticastMessageBody.contains(messageBody)) {
-								receivedMulticastMessageBody.add(messageBody);
-								if (!(message.getSource().equals(localName))) {
-									String groupName = messageBody.split(" ")[MULTICAST_MESSAGE_GROUP_NAME_INDEX];
-									System.out.println("\n\nReceived a multicast message from "
-											+ message.getSource());
-									System.out.println("Multicasting it to members in " + groupName
-											+ "..");
-									multicast(groupMembers.get(groupName), message);
-								}
-								// Don't deliver this message yet
-								// TODO Put this message in the hold-back queue
-								// TODO Check the hold-back queue for the
-								// message that satisfies conditions
-								// TODO Found the one. Pull it and deliver it
-								// (CO-deliver)
-								receiveBuffer.add(message);
-								// TODO Increment vector time stamp at the
-								// "multicaster" entry
-							} else {
-								// If this message has been received before,
-								// ignore it then leave
-								continue;
-							}
+							synchronized (receivedMulticastMessageBody) {
+								if (!receivedMulticastMessageBody.contains(messageBody)) {
+									receivedMulticastMessageBody.add(messageBody);
+									if (!(message.getSource().equals(localName))) {
+										String groupName = messageBody.split(" ")[MULTICAST_MSG_GROUP_NAME_INDEX];
+										System.out.println("\n\nReceived a multicast message from "
+												+ message.getSource());
+										System.out.println("Multicasting it to " + groupName);
+										multicast(groupMembers.get(groupName), message);
+									}
+									// Don't deliver this message yet
+									synchronized (holdBackQueue) {
+										// Put this message in the hold-back
+										// queue
+										holdBackQueue.add(message);
+										// Look for messages that satisfy
+										// conditions
+										boolean willDeliver = true;
+										int messageToDeliverIndex = -1;
+										int multicasterNodeIndex = -1;
+										ArrayList<Integer> localV = (ArrayList<Integer>) clockService
+												.getTimeStamp();
+										for (; messageToDeliverIndex < holdBackQueue.size(); messageToDeliverIndex++) {
+											TimeStampedMessage tsm = holdBackQueue
+													.get(messageToDeliverIndex);
+											ArrayList<Integer> messageV = (ArrayList<Integer>) tsm
+													.getTimeStamp();
+											String multicasterName = ((String) tsm.getData())
+													.split(" ")[MULTICAST_MSG_MULTICASTER_NAME_INDEX];
+											multicasterNodeIndex = getNodeIndex(multicasterName);
+											if (messageV.get(multicasterNodeIndex).equals(
+													localV.get(multicasterNodeIndex) + 1)) {
+												for (int k = 0; k < messageV.size(); k++) {
+													if (k == localNodeIndex)
+														continue;
+													if (messageV.get(k).compareTo(localV.get(k)) > 0) {
+														willDeliver = false;
+														break;
+													}
+												}
+												if (!willDeliver)
+													break;
+											} else {
+												willDeliver = false;
+												break;
+											}
+										}
+										// Pull it from the queue and CO-deliver
+										if (willDeliver) {
+											receiveBuffer.add(holdBackQueue
+													.remove(messageToDeliverIndex));
+											// Inc time stamp at the multicaster
+											// entry
+											localV.set(multicasterNodeIndex,
+													localV.get(multicasterNodeIndex) + 1);
+										}
+									} // end synchronize(holdBackQueue)
+								} // end checking whether this message has been
+									// received
+							} // end locking receivedMulticastMessageBody
 						} else {
 							/*
 							 * Handle ordinary message
@@ -474,8 +516,7 @@ public class MessagePasser {
 								duplicateMessage.setIsDuplicate(true);
 								// Receive the multicast message
 								// If the dupe message is a multicast one, it
-								// must
-								// be received before
+								// must be received before
 								// We just drop it
 								// TODO I don't get this.
 								receiveBuffer.add(duplicateMessage);
