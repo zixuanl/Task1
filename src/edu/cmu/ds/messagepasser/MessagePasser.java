@@ -58,6 +58,7 @@ public class MessagePasser {
 	private String loggerIp = null;
 	private int loggerPort;
 	private ClockService clockService = null;
+	private Map<String, VectorClock> clockServiceGroups = new HashMap<String, VectorClock>();
 	private Map<String, List<String>> groupMembers = null;
 	// First multicast message's sequence number will be 1
 	private int multicastSequenceNumber = 0;
@@ -84,7 +85,11 @@ public class MessagePasser {
 		if (this.useLogicalClock) {
 			clockService = new LogicalClock();
 		} else {
-			clockService = new VectorClock(peerNodeList.size() + 1, localNodeIndex);
+			clockService = new VectorClock(allNodeList.size(), localNodeIndex);
+			Iterator<String> iter = groupMembers.keySet().iterator();
+			while (iter.hasNext()) {
+				clockServiceGroups.put(iter.next(), new VectorClock(allNodeList.size(), localNodeIndex));
+			}
 		}
 		try {
 			this.listenerSocket = new ServerSocket(this.localPort);
@@ -101,7 +106,7 @@ public class MessagePasser {
 	 */
 	public void printInfo() {
 		System.out.println("Local name is " + localName);
-		System.out.println("Total number of node is " + (this.peerNodeList.size() + 1));
+		System.out.println("Total number of node is " + this.allNodeList.size());
 		System.out.println("Local node index is " + localNodeIndex);
 		if (useLogicalClock)
 			System.out.println("Using logical clock");
@@ -118,6 +123,11 @@ public class MessagePasser {
 
 	public void printTimeStamp() {
 		System.out.println(localName + " time stamp: " + clockService.getTimeStamp());
+		Iterator<Entry<String, VectorClock>> iter = clockServiceGroups.entrySet().iterator();
+		while (iter.hasNext()) {
+			Entry<String, VectorClock> entry = iter.next();
+			System.out.println("\t"+entry.getKey()+": "+entry.getValue());
+		}
 	}
 
 	public Map<String, List<String>> getGroupMembers() {
@@ -195,16 +205,19 @@ public class MessagePasser {
 	 *            False if don't need to multicast to itself
 	 * @throws IOException
 	 */
-	public void multicast(List<String> destinationNodeNames, TimeStampedMessage message, boolean includeSelf) {
+	public void multicast(String groupName, TimeStampedMessage message, boolean includeSelf) {
 		if (!(clockService instanceof VectorClock)) {
 			System.out.println("Please use vector clock to use multicast feature.");
 			return;
 		}
+		List<String> destinationNodeNames = groupMembers.get(groupName);
+		VectorClock groupClock = clockServiceGroups.get(groupName);
+		
 		// Increment sequence number
 		sequenceNumber.incrementAndGet();
 		if (includeSelf) {
 			// Increment timestamp
-			clockService.incrementAndGetTimeStamp();
+			groupClock.incrementAndGetTimeStamp();
 			printTimeStamp();
 		}
 
@@ -218,7 +231,7 @@ public class MessagePasser {
 			newMessage.setSource(localName);
 			newMessage.setSequenceNumber(sequenceNumber.get());
 			newMessage.setDestination(localName);
-			newMessage.setTimeStamp(clockService.getTimeStamp());
+			newMessage.setTimeStamp(groupClock.getTimeStamp());
 			handleReceiveMulticastMessage(newMessage);
 		}
 		for (String nodeName : destinationNodeNames) {
@@ -227,7 +240,7 @@ public class MessagePasser {
 				newMessage.setSource(localName);
 				newMessage.setSequenceNumber(sequenceNumber.get());
 				newMessage.setDestination(nodeName);
-				newMessage.setTimeStamp(clockService.getTimeStamp());
+				newMessage.setTimeStamp(groupClock.getTimeStamp());
 				send(newMessage, getNodeIndex(nodeName), true);
 			}
 		}
@@ -500,6 +513,7 @@ public class MessagePasser {
 			receivedMulticast.add(messageBody);
 			String multicaster = messageBody.split(" ")[MULTICAST_MSG_MULTICASTER_NAME_INDEX];
 			String groupName = messageBody.split(" ")[MULTICAST_MSG_GROUP_NAME_INDEX];
+			VectorClock groupClock = clockServiceGroups.get(groupName);
 			System.out.println("\n\nReceived a multicast by {" + multicaster + "} from {" + message.getSource() + "}");
 			// R-deliver: Multicast it if current node is not its sender
 			if (message.getSource().equals(localName))
@@ -516,7 +530,7 @@ public class MessagePasser {
 				do {
 					removeLater = new ArrayList<TimeStampedMessage>();
 					// Look for messages that satisfy CO-delivery conditions
-					ArrayList<Integer> localTimeStamp = (ArrayList<Integer>) clockService.getTimeStamp();
+					ArrayList<Integer> localTimeStamp = (ArrayList<Integer>) groupClock.getTimeStamp();
 					for (int i = 0; i < holdBackQueue.size(); i++) {
 						TimeStampedMessage tsm = holdBackQueue.get(i);
 						ArrayList<Integer> messageTimeStamp = (ArrayList<Integer>) tsm.getTimeStamp();
@@ -542,7 +556,7 @@ public class MessagePasser {
 							removeLater.add(tsm);
 							receiveBuffer.add(tsm);
 							// Inc local time stamp at the multicaster entry
-							((VectorClock) clockService).incTimeStamp(j);
+							groupClock.incTimeStamp(j);
 						}
 					}
 					// After sending from hold-back queue, they must be removed
@@ -557,7 +571,7 @@ public class MessagePasser {
 
 			// Then, multicast this message to other members (except itself)
 			System.out.println("Multicasting the received message to " + groupName);
-			multicast(groupMembers.get(groupName), message, false);
+			multicast(groupName, message, false);
 		} // end synchronized(receivedMulticast)
 		System.out.print(commandPrompt);
 	}
@@ -825,7 +839,7 @@ public class MessagePasser {
 
 					boolean mustLog = (logInfo.toLowerCase().equals("y"));
 					TimeStampedMessage message = new TimeStampedMessage(groupName, "multicast", data);
-					messagePasser.multicast(messagePasser.getGroupMembers(groupName), message, true);
+					messagePasser.multicast(groupName, message, true);
 
 					if (mustLog) {
 						message.setDestination(groupName);

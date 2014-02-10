@@ -8,8 +8,8 @@ public class VectorClock extends ClockService {
 	private Integer processCount = null;
 	private Integer localProcessIndex = null;
 	private Semaphore mutex = new Semaphore(1);
-	
-	public VectorClock(int sum, int index){
+
+	public VectorClock(int sum, int index) {
 		processCount = sum;
 		localProcessIndex = index;
 		vectorTimeStamp = new ArrayList<Integer>();
@@ -24,23 +24,24 @@ public class VectorClock extends ClockService {
 		ArrayList<Integer> result = null;
 		try {
 			mutex.acquire();
-			vectorTimeStamp.set(localProcessIndex, vectorTimeStamp.get(localProcessIndex)+1);
-			result = (ArrayList<Integer>)vectorTimeStamp.clone();
+			vectorTimeStamp.set(localProcessIndex, vectorTimeStamp.get(localProcessIndex) + 1);
+			result = (ArrayList<Integer>) vectorTimeStamp.clone();
 		} catch (Exception e) {
 		} finally {
 			mutex.release();
 		}
 		return result;
 	}
-	
+
 	/**
 	 * Increment vector timestamp at a specific index
+	 * 
 	 * @param processIndex
 	 */
 	public void incTimeStamp(int processIndex) {
 		try {
 			mutex.acquire();
-			vectorTimeStamp.set(processIndex, vectorTimeStamp.get(processIndex)+1);
+			vectorTimeStamp.set(processIndex, vectorTimeStamp.get(processIndex) + 1);
 		} catch (Exception e) {
 		} finally {
 			mutex.release();
@@ -53,7 +54,7 @@ public class VectorClock extends ClockService {
 		ArrayList<Integer> newTime = (ArrayList<Integer>) timeStamp;
 		try {
 			mutex.acquire();
-			vectorTimeStamp.set(localProcessIndex, vectorTimeStamp.get(localProcessIndex)+1);
+			vectorTimeStamp.set(localProcessIndex, vectorTimeStamp.get(localProcessIndex) + 1);
 			for (int i = 0; i < vectorTimeStamp.size(); ++i) {
 				if (newTime.get(i) > vectorTimeStamp.get(i)) {
 					vectorTimeStamp.set(i, newTime.get(i));
@@ -71,12 +72,16 @@ public class VectorClock extends ClockService {
 		ArrayList<Integer> result = null;
 		try {
 			mutex.acquire();
-			result = (ArrayList<Integer>)vectorTimeStamp.clone();
+			result = (ArrayList<Integer>) vectorTimeStamp.clone();
 		} catch (Exception e) {
 		} finally {
 			mutex.release();
 		}
 		return result;
 	}
-	
+
+	@Override
+	public String toString() {
+		return "VectorClock" + vectorTimeStamp;
+	}
 }
