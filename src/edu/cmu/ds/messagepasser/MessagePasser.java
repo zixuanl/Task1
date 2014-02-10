@@ -30,6 +30,8 @@ import edu.cmu.ds.messagepasser.model.TimeStampedMessage;
 
 public class MessagePasser {
 	private static final String DEFAULT_CONFIG_FILENAME = "sample.yaml";
+	private static final int MULTICAST_MESSAGE_MULTICASTER_INDEX = 6;
+	private static final int MULTICAST_MESSAGE_GROUP_NAME_INDEX = 8;
 	private static String commandPrompt = ">: ";
 	private String configurationFileName;
 	private String localName;
@@ -55,7 +57,6 @@ public class MessagePasser {
 	private Map<String, List<String>> groupMembers = null;
 	// First multicast message's sequence number will be 1
 	private int multicastSequenceNumber = 0;
-	private static final int MULTICAST_MESSAGE_GROUP_NAME_INDEX = 8;
 
 	public MessagePasser(String inConfigurationFilename, String inLocalName,
 			boolean inUseLogicalClock) throws FileNotFoundException {
@@ -123,13 +124,13 @@ public class MessagePasser {
 	}
 
 	/**
-	 * Send a message to the logger but not increment time stamp (for used by
-	 * send() and receive() only)
+	 * Log a message by sending it to the logger, without incrementing time
+	 * stamp
 	 * 
 	 * @param message
 	 * @throws IOException
 	 */
-	private void sendLog(Message message) throws IOException {
+	private void log(Message message) throws IOException {
 		Socket socket = null;
 		try {
 			socket = new Socket(loggerIp, loggerPort);
@@ -216,7 +217,8 @@ public class MessagePasser {
 		 */
 		if (!isMulticastMessage) {
 			message.setTimeStamp(clockService.getIncTimeStamp());
-			System.out.println("Current "+localName+"'s time stamp: "+clockService.getTimeStamp());
+			System.out.println("Current " + localName + "'s time stamp: "
+					+ clockService.getTimeStamp());
 		}
 
 		// Get a connection
@@ -678,14 +680,15 @@ public class MessagePasser {
 						nodeIndex = -1;
 					messagePasser.send(message, nodeIndex, false);
 					if (mustLog) {
-						messagePasser.sendLog(message);
+						messagePasser.log(message);
 					}
 				}
 			} else if (command.equals("mark")) {
 				/*
 				 * Mark: send a message only to logger.
 				 */
-				TimeStampedMessage markMessage = new TimeStampedMessage("logger", "log", "This is a mark.");
+				TimeStampedMessage markMessage = new TimeStampedMessage("logger", "log",
+						"This is a mark.");
 				markMessage.setSource(localName);
 				markMessage.setSequenceNumber(Integer.MAX_VALUE);
 				messagePasser.mark(markMessage);
@@ -725,7 +728,7 @@ public class MessagePasser {
 							multicastMessage);
 					if (mustLog) {
 						multicastMessage.setDestination(targetMulticastGroupName);
-						messagePasser.sendLog(multicastMessage);
+						messagePasser.log(multicastMessage);
 					}
 				}
 
