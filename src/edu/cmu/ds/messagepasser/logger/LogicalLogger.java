@@ -73,12 +73,7 @@ public class LogicalLogger {
 						information.add(message);
 						mutex.release();
 					}
-				} catch (IOException e) {
-					return;
-				} catch (ClassNotFoundException e) {
-					return;
-				} catch (InterruptedException e) {
-					mutex.release();
+				} catch (Exception e) {
 				}
 			}
 		}).start();
@@ -93,7 +88,7 @@ public class LogicalLogger {
 		while (iter.hasNext()) {
 			TimeStampedMessage message = iter.next();
 			System.out.println(message.getSource() + " to " + message.getDestination() + " "
-			+ message.getSequenceNumber() + " " + message.getTimeStamp());
+					+ message.getSequenceNumber() + " " + message.getTimeStamp());
 		}
 		mutex.release();
 	}

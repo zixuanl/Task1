@@ -6,7 +6,7 @@ public class LogicalClock extends ClockService {
 	private Integer count = -1;
 	private Semaphore mutex = new Semaphore(1);
 	
-	public Object getIncTimeStamp() {
+	public Object incrementAndGetTimeStamp() {
 		// TODO Auto-generated method stub
 		int result = 0;
 		try {
