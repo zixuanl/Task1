@@ -507,9 +507,13 @@ public class MessagePasser {
 			System.out.println("Will multicast it to " + groupName + " soon");
 			synchronized (holdBackQueue) {
 				ArrayList<TimeStampedMessage> removeLater;
+				// CO-deliver: Put it in the hold-back queue
+				holdBackQueue.add(message);
+				// Also put delayed messages into the hold-back queue
+				while (!receiveDelayedBuffer.isEmpty()) {
+					holdBackQueue.add(receiveDelayedBuffer.poll());
+				}
 				do {
-					// CO-deliver: Put it in the hold-back queue
-					holdBackQueue.add(message);
 					removeLater = new ArrayList<TimeStampedMessage>();
 					// Look for messages that satisfy CO-delivery conditions
 					ArrayList<Integer> localTimeStamp = (ArrayList<Integer>) clockService.getTimeStamp();
@@ -537,8 +541,7 @@ public class MessagePasser {
 						if (mustDeliver) {
 							removeLater.add(tsm);
 							receiveBuffer.add(tsm);
-							// Increment local time stamp at the multicaster
-							// entry
+							// Inc local time stamp at the multicaster entry
 							((VectorClock) clockService).incTimeStamp(j);
 						}
 					}
@@ -551,6 +554,8 @@ public class MessagePasser {
 					// messages in the hold-back queue that could be delivered!
 				} while (!removeLater.isEmpty());
 			} // end synchronize(holdBackQueue)
+
+			// Then, multicast this message to other members (except itself)
 			System.out.println("Multicasting the received message to " + groupName);
 			multicast(groupMembers.get(groupName), message, false);
 		} // end synchronized(receivedMulticast)

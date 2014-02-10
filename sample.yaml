@@ -38,9 +38,9 @@ logger :
 # This is the incoming port on which MP will listen
 # May be changed for further communication as usual
 sendRules :
-  - action : drop
-    src    : alice
-    dest   : bob
+  # - action : drop
+  #   src    : alice
+  #   dest   : bob
 
   - action : drop # Every Lookup message in the system will be delayed
     kind   : lookup
