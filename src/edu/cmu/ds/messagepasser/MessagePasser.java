@@ -150,22 +150,10 @@ public class MessagePasser {
 	 * @param message
 	 * @throws IOException
 	 */
-	public void mark(Message message) throws IOException {
-		if (useLogicalClock == true) {
-			/*
-			 * Mark logical
-			 */
-			((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
-			System.out.println(clockService.getTimeStamp());
-		} else {
-			/*
-			 * Mark vector
-			 */
-			((TimeStampedMessage) message).setTimeStamp(clockService.getIncTimeStamp());
-			@SuppressWarnings("unchecked")
-			ArrayList<Integer> timeStamp = (ArrayList<Integer>) clockService.getTimeStamp();
-			System.out.println(localName + ": current time stamp is " + timeStamp.toString());
-		}
+	public void mark(TimeStampedMessage message) throws IOException {
+		message.setTimeStamp(clockService.getIncTimeStamp());
+		System.out
+				.println("Current " + localName + "'s time stamp: " + clockService.getTimeStamp());
 		Socket socket = null;
 		try {
 			socket = new Socket(loggerIp, loggerPort);
@@ -187,25 +175,11 @@ public class MessagePasser {
 	 * @param message
 	 * @throws IOException
 	 */
-	public void multicast(List<String> destinationNodeNames, TimeStampedMessage message) throws IOException {
-		if (message instanceof TimeStampedMessage) {
-			TimeStampedMessage tsm = (TimeStampedMessage) message;
-			if (useLogicalClock) {
-				/*
-				 * Multicast logical
-				 */
-				tsm.setTimeStamp(clockService.getIncTimeStamp());
-				System.out.println(clockService.getTimeStamp());
-			} else {
-				/*
-				 * Multicast vector
-				 */
-				tsm.setTimeStamp(clockService.getIncTimeStamp());
-				@SuppressWarnings("unchecked")
-				ArrayList<Integer> timeStamp = (ArrayList<Integer>) clockService.getTimeStamp();
-				System.out.println(localName + ": current time stamp is " + timeStamp.toString());
-			}
-		}
+	public void multicast(List<String> destinationNodeNames, TimeStampedMessage message)
+			throws IOException {
+		message.setTimeStamp(clockService.getIncTimeStamp());
+		System.out
+				.println("Current " + localName + "'s time stamp: " + clockService.getTimeStamp());
 
 		message.setSource(localName);
 		message.setSequenceNumber(sequenceNumber.addAndGet(1));
@@ -217,16 +191,9 @@ public class MessagePasser {
 				continue;
 			}
 			message.setDestination(nodeName);
-			// The third parameter is "true" to tell send() not to increment
-			// sequence number
+			// 3rd param is "true" to tell send() not to increment seq num
 			send(message, nodeIndex, true);
 		}
-		// for (int i = 0; i < destinationNodeNames.size(); i++) {
-		// Integer targetNodeIndex = getNodeIndex(destinationNodeNames.get(i));
-		// message.setDestination(destinationNodeNames.get(i));
-		// send(message, targetNodeIndex, true);
-		// }
-
 	}
 
 	/**
@@ -243,31 +210,13 @@ public class MessagePasser {
 	 */
 	public void send(TimeStampedMessage message, int targetNodeIndex, boolean isMulticastMessage)
 			throws IOException {
-
 		/*
 		 * Increment timestamp. Except if the message is multicast, because
 		 * multicast() has done it.
 		 */
 		if (!isMulticastMessage) {
-			if (message instanceof TimeStampedMessage) {
-				TimeStampedMessage tsm = (TimeStampedMessage) message;
-				if (useLogicalClock) {
-					/*
-					 * Send logical
-					 */
-					tsm.setTimeStamp(clockService.getIncTimeStamp());
-					System.out.println(clockService.getTimeStamp());
-				} else {
-					/*
-					 * Send vector
-					 */
-					tsm.setTimeStamp(clockService.getIncTimeStamp());
-					@SuppressWarnings("unchecked")
-					ArrayList<Integer> timeStamp = (ArrayList<Integer>) clockService.getTimeStamp();
-					System.out.println(localName + ": current time stamp is "
-							+ timeStamp.toString());
-				}
-			}
+			message.setTimeStamp(clockService.getIncTimeStamp());
+			System.out.println("Current "+localName+"'s time stamp: "+clockService.getTimeStamp());
 		}
 
 		// Get a connection
@@ -280,8 +229,7 @@ public class MessagePasser {
 				ObjectOutputStream ot_temp = new ObjectOutputStream(socket.getOutputStream());
 				clientSocketPool.put(message.getDestination(), socket);
 				clientOutputPool.put(message.getDestination(), ot_temp);
-				System.out.println("Connection to " + message.getDestination()
-						+ " established.");
+				System.out.println("Connection to " + message.getDestination() + " established.");
 			}
 		} catch (ConnectException e) {
 			System.out.println(message.getDestination() + " is offline!");
@@ -395,18 +343,16 @@ public class MessagePasser {
 				 * Receive logical
 				 */
 				clockService.updateTime(message.getTimeStamp());
-				System.out.println(clockService.getTimeStamp());
 			} else {
 				/*
 				 * Receive vector
 				 */
 				clockService.updateTime(message.getTimeStamp());
-				@SuppressWarnings("unchecked")
-				ArrayList<Integer> timeStamp = (ArrayList<Integer>) clockService.getTimeStamp();
-				System.out.println(localName + ": current time stamp is "+timeStamp.toString());
 			}
 			System.out.println("\nDelivered message from " + message.getSource());
 			System.out.println(message);
+			System.out.println("Current " + localName + "'s time stamp: "
+					+ clockService.getTimeStamp());
 			System.out.print(commandPrompt);
 		}
 	}
@@ -723,7 +669,8 @@ public class MessagePasser {
 					System.out.println("Invalid destination");
 				} else {
 					// Create and send a time stamped message
-					TimeStampedMessage message = new TimeStampedMessage(destination, kind, messageBody);
+					TimeStampedMessage message = new TimeStampedMessage(destination, kind,
+							messageBody);
 
 					// if nodeIndex == null, it means send to itself
 					// socket has been established at the init of messagePasser
@@ -736,11 +683,10 @@ public class MessagePasser {
 				}
 			} else if (command.equals("mark")) {
 				/*
-				 * Mark
+				 * Mark: send a message only to logger.
 				 */
-				Message markMessage = new TimeStampedMessage("logger", "log", "This is a mark.");
+				TimeStampedMessage markMessage = new TimeStampedMessage("logger", "log", "This is a mark.");
 				markMessage.setSource(localName);
-				// We don't care the sequence number.
 				markMessage.setSequenceNumber(Integer.MAX_VALUE);
 				messagePasser.mark(markMessage);
 			} else if (command.equals("multicast")) {
@@ -772,8 +718,8 @@ public class MessagePasser {
 						logInfo = input.readLine();
 					} while (!logInfo.equals("y") && !logInfo.equals("n"));
 					boolean mustLog = (logInfo.toLowerCase().equals("y"));
-					TimeStampedMessage multicastMessage = new TimeStampedMessage(targetMulticastGroupName,
-							"multicast", multicastMessageBody);
+					TimeStampedMessage multicastMessage = new TimeStampedMessage(
+							targetMulticastGroupName, "multicast", multicastMessageBody);
 					messagePasser.multicast(
 							messagePasser.getGroupInfo().get(targetMulticastGroupName),
 							multicastMessage);

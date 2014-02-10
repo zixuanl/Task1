@@ -39,8 +39,9 @@ logger :
 # May be changed for further communication as usual
 sendRules :
   - action : drop # Ack message number 4 from bob to alice will not be sent
-    src    : alice
-    dest   : bob
+    kind : drop
+    #src    : alice
+    #dest   : bob
 
   - action : drop # Every Lookup message in the system will be delayed
     kind   : lookup
