@@ -20,7 +20,7 @@ public class VectorClock extends ClockService {
 
 	@SuppressWarnings("unchecked")
 	@Override
-	public Object getIncTimeStamp() {
+	public Object incrementAndGetTimeStamp() {
 		ArrayList<Integer> result = null;
 		try {
 			mutex.acquire();

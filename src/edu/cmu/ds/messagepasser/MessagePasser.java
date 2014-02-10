@@ -170,7 +170,7 @@ public class MessagePasser {
 	 * @throws IOException
 	 */
 	public void mark(TimeStampedMessage message) throws IOException {
-		message.setTimeStamp(clockService.getIncTimeStamp());
+		message.setTimeStamp(clockService.incrementAndGetTimeStamp());
 		System.out.println("Current " + localName + "'s time stamp: " + clockService.getTimeStamp());
 		Socket socket = null;
 		try {
@@ -200,12 +200,11 @@ public class MessagePasser {
 			System.out.println("Please use vector clock to use multicast feature.");
 			return;
 		}
-		TimeStampedMessage newMessage = new TimeStampedMessage(message);
-		newMessage.setSource(localName);
-		newMessage.setSequenceNumber(sequenceNumber.addAndGet(1));
+		// Increment sequence number
+		sequenceNumber.incrementAndGet();
 		if (includeSelf) {
 			// Increment timestamp
-			newMessage.setTimeStamp(clockService.getIncTimeStamp());
+			clockService.incrementAndGetTimeStamp();
 			printTimeStamp();
 		}
 
@@ -215,12 +214,20 @@ public class MessagePasser {
 		 */
 		// CO-deliver itself
 		if (includeSelf) {
+			TimeStampedMessage newMessage = new TimeStampedMessage(message);
+			newMessage.setSource(localName);
+			newMessage.setSequenceNumber(sequenceNumber.get());
 			newMessage.setDestination(localName);
+			newMessage.setTimeStamp(clockService.getTimeStamp());
 			handleReceiveMulticastMessage(newMessage);
 		}
 		for (String nodeName : destinationNodeNames) {
 			if (!nodeName.equals(localName)) {
+				TimeStampedMessage newMessage = new TimeStampedMessage(message);
+				newMessage.setSource(localName);
+				newMessage.setSequenceNumber(sequenceNumber.get());
 				newMessage.setDestination(nodeName);
+				newMessage.setTimeStamp(clockService.getTimeStamp());
 				send(newMessage, getNodeIndex(nodeName), true);
 			}
 		}
@@ -246,7 +253,7 @@ public class MessagePasser {
 		 * Increment timestamp only if the command is "send"
 		 */
 		if (!isMulticastMessage) {
-			message.setTimeStamp(clockService.getIncTimeStamp());
+			message.setTimeStamp(clockService.incrementAndGetTimeStamp());
 			printTimeStamp();
 		}
 
@@ -287,21 +294,19 @@ public class MessagePasser {
 				 */
 				System.out.println("Message dropped at the sender");
 				return;
-			}
-			if (action.equals("duplicate")) {
+			} else if (action.equals("duplicate")) {
 				/*
 				 * Duplicate: will duplicate this message and then send all
 				 * delayed messages
 				 */
 				System.out.println("Message duplicated at the sender");
 				willDuplicate = true;
-			}
-			if (action.equals("delay")) {
+			} else if (action.equals("delay")) {
 				/*
 				 * Delay: defer this message and leave
 				 */
 				System.out.println("Message delayed at the sender");
-				sendDelayedBuffer.add(message);
+				sendDelayedBuffer.add(new TimeStampedMessage(message));
 				return;
 			}
 		}
@@ -313,9 +318,9 @@ public class MessagePasser {
 			ot.writeObject(message);
 			ot.flush();
 			if (willDuplicate) {
-				Message duplicateMessage = new Message(message);
-				duplicateMessage.setIsDuplicate(true);
-				ot.writeObject(duplicateMessage);
+				TimeStampedMessage newMessage = new TimeStampedMessage(message);
+				newMessage.setIsDuplicate(true);
+				ot.writeObject(newMessage);
 				ot.flush();
 			}
 		} catch (Exception e) {
@@ -329,7 +334,7 @@ public class MessagePasser {
 		 * Send the rest of delayed messages if there are any
 		 */
 		while (!sendDelayedBuffer.isEmpty()) {
-			Message delayedMessage = new Message(sendDelayedBuffer.poll());
+			TimeStampedMessage delayedMessage = new TimeStampedMessage(sendDelayedBuffer.poll());
 			String destinationIp = null;
 			int destinationPort = 0;
 			for (Node node : peerNodeList) {
@@ -390,9 +395,10 @@ public class MessagePasser {
 		}
 		return null;
 	}
-	
+
 	/**
 	 * Get a process index of a node with a specific name
+	 * 
 	 * @param nodeName
 	 * @return
 	 */
@@ -452,7 +458,7 @@ public class MessagePasser {
 								 */
 								System.out.println("Message delayed at the receiver");
 								System.out.print(commandPrompt);
-								receiveDelayedBuffer.add(message);
+								receiveDelayedBuffer.add(new TimeStampedMessage(message));
 								continue;
 							}
 						}
@@ -500,52 +506,50 @@ public class MessagePasser {
 				return;
 			System.out.println("Will multicast it to " + groupName + " soon");
 			synchronized (holdBackQueue) {
-				// CO-deliver: Put it in the hold-back queue
-				holdBackQueue.add(message);
-				// Look for messages that satisfy CO-delivery conditions
-				ArrayList<TimeStampedMessage> removeLater = new ArrayList<TimeStampedMessage>();
-				ArrayList<Integer> localTimeStamp = (ArrayList<Integer>) clockService.getTimeStamp();
-				for (int i = 0; i < holdBackQueue.size(); i++) {
-					TimeStampedMessage tsm = holdBackQueue.get(i);
-					ArrayList<Integer> messageTimeStamp = (ArrayList<Integer>) tsm.getTimeStamp();
-					String name = ((String) tsm.getData()).split(" ")[MULTICAST_MSG_MULTICASTER_NAME_INDEX];
-					int j = getProcessIndex(name);
-					boolean mustDeliver = true;
-					// Check Vj[j] == Vi[j] + 1
-					if (messageTimeStamp.get(j).equals(localTimeStamp.get(j) + 1)) {
-						// Check Vj[k] <= Vi[k] and k != j
-						for (int k = 0; k < messageTimeStamp.size(); k++) {
-							if (k == j)
-								continue;
-							if (messageTimeStamp.get(k).compareTo(localTimeStamp.get(k)) > 0) {
-								mustDeliver = false;
-								break;
+				ArrayList<TimeStampedMessage> removeLater;
+				do {
+					// CO-deliver: Put it in the hold-back queue
+					holdBackQueue.add(message);
+					removeLater = new ArrayList<TimeStampedMessage>();
+					// Look for messages that satisfy CO-delivery conditions
+					ArrayList<Integer> localTimeStamp = (ArrayList<Integer>) clockService.getTimeStamp();
+					for (int i = 0; i < holdBackQueue.size(); i++) {
+						TimeStampedMessage tsm = holdBackQueue.get(i);
+						ArrayList<Integer> messageTimeStamp = (ArrayList<Integer>) tsm.getTimeStamp();
+						String name = ((String) tsm.getData()).split(" ")[MULTICAST_MSG_MULTICASTER_NAME_INDEX];
+						int j = getProcessIndex(name);
+						boolean mustDeliver = true;
+						// Check Vj[j] == Vi[j] + 1
+						if (messageTimeStamp.get(j).equals(localTimeStamp.get(j) + 1)) {
+							// Check Vj[k] <= Vi[k] and k != j
+							for (int k = 0; k < messageTimeStamp.size(); k++) {
+								if (k == j)
+									continue;
+								if (messageTimeStamp.get(k).compareTo(localTimeStamp.get(k)) > 0) {
+									mustDeliver = false;
+									break;
+								}
 							}
+						} else {
+							mustDeliver = false;
 						}
-					} else {
-						mustDeliver = false;
+						// CO-deliver: Pull it from the queue deliver
+						if (mustDeliver) {
+							removeLater.add(tsm);
+							receiveBuffer.add(tsm);
+							// Increment local time stamp at the multicaster
+							// entry
+							((VectorClock) clockService).incTimeStamp(j);
+						}
 					}
-					// CO-deliver: Pull it from the queue deliver
-					if (mustDeliver) {
-						removeLater.add(tsm);
-						receiveBuffer.add(tsm);
-						// Increment timestamp
-//						clockService.getIncTimeStamp();
-//						System.out.println(localName + " time stamp: " +
-						// clockService.getTimeStamp());
-						// Vi[j] = Vi[j] + 1
-						// Increment local time stamp at the multicaster entry
-						((VectorClock) clockService).incTimeStamp(j);
-//						clockService.
-//						localTimeStamp.set(j, localTimeStamp.get(j) + 1);
-//						clockService.updateTime(tsm.getTimeStamp());
+					// After sending from hold-back queue, they must be removed
+					// later here
+					for (TimeStampedMessage tsm : removeLater) {
+						holdBackQueue.remove(tsm);
 					}
-				}
-				// After sending messages in the hold-back queue, they must be
-				// removed later here
-				for (TimeStampedMessage tsm : removeLater) {
-					holdBackQueue.remove(tsm);
-				}
+					// If there are sth to remove, that means there are some
+					// messages in the hold-back queue that could be delivered!
+				} while (!removeLater.isEmpty());
 			} // end synchronize(holdBackQueue)
 			System.out.println("Multicasting the received message to " + groupName);
 			multicast(groupMembers.get(groupName), message, false);
