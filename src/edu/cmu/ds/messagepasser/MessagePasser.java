@@ -30,8 +30,8 @@ import edu.cmu.ds.messagepasser.model.TimeStampedMessage;
 
 public class MessagePasser {
 	private static final String DEFAULT_CONFIG_FILENAME = "sample.yaml";
-	private static final int MULTICAST_MESSAGE_MULTICASTER_INDEX = 6;
-	private static final int MULTICAST_MESSAGE_GROUP_NAME_INDEX = 8;
+	private static final int MULTICAST_MESSAGE_MULTICASTER_NODE_INDEX = 3;
+	private static final int MULTICAST_MESSAGE_GROUP_NAME_INDEX = 5;
 	private static String commandPrompt = ">: ";
 	private String configurationFileName;
 	private String localName;
@@ -39,6 +39,7 @@ public class MessagePasser {
 	private ConcurrentLinkedQueue<TimeStampedMessage> receiveBuffer = new ConcurrentLinkedQueue<TimeStampedMessage>();
 	private ConcurrentLinkedQueue<TimeStampedMessage> receiveDelayedBuffer = new ConcurrentLinkedQueue<TimeStampedMessage>();
 	private ConcurrentLinkedQueue<TimeStampedMessage> sendDelayedBuffer = new ConcurrentLinkedQueue<TimeStampedMessage>();
+	private ConcurrentLinkedQueue<TimeStampedMessage> holdBackQueue = new ConcurrentLinkedQueue<TimeStampedMessage>();
 	private ArrayList<String> receivedMulticastMessageBody = new ArrayList<String>();
 	private ArrayList<Rule> receiveRuleList;
 	private ArrayList<Rule> sendRuleList;
@@ -115,7 +116,12 @@ public class MessagePasser {
 		return groupMembers;
 	}
 
-	private Integer incrementAndGetMulticastSequenceNumber() {
+	/**
+	 * Increment then return multicast sequence number
+	 * 
+	 * @return
+	 */
+	private Integer getIncMulticastSequenceNumber() {
 		return ++multicastSequenceNumber;
 	}
 
@@ -185,14 +191,18 @@ public class MessagePasser {
 		message.setSource(localName);
 		message.setSequenceNumber(sequenceNumber.addAndGet(1));
 
-		// Sequentially send messages to everyone in the list
+		/*
+		 * B-multicast to the target group by sequentially send messages to
+		 * everyone in the list with the same message sequence number
+		 */
 		for (String nodeName : destinationNodeNames) {
 			Integer nodeIndex = getNodeIndex(nodeName);
 			if (nodeIndex == null) {
 				continue;
 			}
 			message.setDestination(nodeName);
-			// 3rd param is "true" to tell send() not to increment seq num
+			// 3rd param "true" means forcing send() to retain the same message
+			// sequence number
 			send(message, nodeIndex, true);
 		}
 	}
@@ -334,24 +344,13 @@ public class MessagePasser {
 	}
 
 	/**
-	 * Get a message from receiveBuffer and print it
+	 * Deliver a message from the receiveBuffer
 	 */
 	public void receive() {
 		if (receiveBuffer.peek() != null) {
-			System.out.println("");
 			TimeStampedMessage message = receiveBuffer.poll();
-			if (useLogicalClock) {
-				/*
-				 * Receive logical
-				 */
-				clockService.updateTime(message.getTimeStamp());
-			} else {
-				/*
-				 * Receive vector
-				 */
-				clockService.updateTime(message.getTimeStamp());
-			}
-			System.out.println("\nDelivered message from " + message.getSource());
+			clockService.updateTime(message.getTimeStamp());
+			System.out.println("\n\nDelivered message from " + message.getSource());
 			System.out.println(message);
 			System.out.println("Current " + localName + "'s time stamp: "
 					+ clockService.getTimeStamp());
@@ -378,6 +377,8 @@ public class MessagePasser {
 
 	/**
 	 * Start a thread that monitors for incoming data from a MessagePasser
+	 * Sophisticated algorithms are around here in order to decide which
+	 * messages to deliver
 	 * 
 	 * @param socket
 	 * @throws IOException
@@ -425,14 +426,17 @@ public class MessagePasser {
 							}
 						}
 
-						/*
-						 * Handle multicast message: Check whether or not the
-						 * node has ever gotten the message. If not, remember
-						 * and deliver it. If it is not the sender of this
-						 * message, multicast it to the other group members.
-						 */
 						if (message.getKind().equals("multicast")) {
+							/*
+							 * Handle multicast message
+							 * 
+							 * Check whether or not the node has ever gotten the
+							 * message. If not, remember and deliver it. If it
+							 * is not the sender of this message, multicast it
+							 * to the other group members.
+							 */
 							String messageBody = (String) message.getData();
+							// This is R-deliver
 							if (!receivedMulticastMessageBody.contains(messageBody)) {
 								receivedMulticastMessageBody.add(messageBody);
 								if (!(message.getSource().equals(localName))) {
@@ -443,42 +447,43 @@ public class MessagePasser {
 											+ "..");
 									multicast(groupMembers.get(groupName), message);
 								}
-								// Deliver this message
+								// Don't deliver this message yet
+								// TODO Put this message in the hold-back queue
+								// TODO Check the hold-back queue for the
+								// message that satisfies conditions
+								// TODO Found the one. Pull it and deliver it
+								// (CO-deliver)
 								receiveBuffer.add(message);
+								// TODO Increment vector time stamp at the
+								// "multicaster" entry
 							} else {
 								// If this message has been received before,
 								// ignore it then leave
 								continue;
 							}
 						} else {
-							// Ordinary message. Just deliver it
+							/*
+							 * Handle ordinary message
+							 * 
+							 * Just deliver it and handle a duplicate rule
+							 */
 							receiveBuffer.add(message);
-						}
-
-						/*
-						 * Handle duplicate rule:
-						 */
-						if (willDuplicate) {
-							TimeStampedMessage duplicateMessage = new TimeStampedMessage(message);
-							duplicateMessage.setIsDuplicate(true);
-							// Receive the multicast message
-							// If the dupe message is a multicast one, it must
-							// be received before
-							// We just drop it
-							// TODO I don't get this.
-							if (!message.getKind().equals("multicast")) {
+							if (willDuplicate) {
+								TimeStampedMessage duplicateMessage = new TimeStampedMessage(
+										message);
+								duplicateMessage.setIsDuplicate(true);
+								// Receive the multicast message
+								// If the dupe message is a multicast one, it
+								// must
+								// be received before
+								// We just drop it
+								// TODO I don't get this.
 								receiveBuffer.add(duplicateMessage);
 							}
+							while (!receiveDelayedBuffer.isEmpty()) {
+								receiveBuffer.add(receiveDelayedBuffer.poll());
+							}
 						}
-
-						while (!receiveDelayedBuffer.isEmpty() && !willTerminate) {
-							// It is the delay buffer
-							// I think sth should be added here
-							// to realize the causal ordering
-
-							receiveBuffer.add(receiveDelayedBuffer.poll());
-						}
-
 					}
 				} catch (Exception e) {
 					return;
@@ -711,9 +716,9 @@ public class MessagePasser {
 					 * multicasting. After split(" "), targetMulticastGroupName
 					 * will be at [MULTICAST_MESSAGE_GROUP_NAME_INDEX]
 					 */
-					String multicastMessageBody = "This is a multicast sent from " + localName
-							+ " to " + targetMulticastGroupName + " MulticastSequenceNumber is "
-							+ messagePasser.incrementAndGetMulticastSequenceNumber();
+					String multicastMessageBody = "Multicast message from " + localName + " to "
+							+ targetMulticastGroupName + " with MulticastSequenceNumber "
+							+ messagePasser.getIncMulticastSequenceNumber();
 					String logInfo;
 					do {
 						System.out.println("Do you want log this message? (y/n)");
