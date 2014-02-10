@@ -248,9 +248,9 @@ public class MessagePasser {
 	 * @param index
 	 * @throws IOException
 	 */
-	public void send(Message message, int index, boolean isGroup) throws IOException {
+	public void send(Message message, int index, boolean isMulticastMessage) throws IOException {
 
-		if (isGroup == false)
+		if (isMulticastMessage == false)
 			if (message instanceof TimeStampedMessage) {
 				if (isLogicalClock == true) {
 					/*
@@ -291,7 +291,7 @@ public class MessagePasser {
 			return;
 		}
 		ot = clientOutputPool.get(message.getDestination());
-		if (isGroup == false) {
+		if (isMulticastMessage == false) {
 			message.setSource(localName);		
 			message.setSequenceNumber(sequenceNumber.addAndGet(1));
 		}
@@ -463,7 +463,7 @@ public class MessagePasser {
 									// To retrieve the GroupName in the Multicast body
 									String[] temp  = ((String)message.getData()).split(" ");
 									String GroupName = temp[8];
-									System.out.println("I receive Multicast from " + message.getSource());
+									System.out.println("I received Multicast from " + message.getSource());
 									System.out.println("I am going to Multicast to the group again");
 									multicast(getGroupInfo().get(GroupName), message);
 								}
