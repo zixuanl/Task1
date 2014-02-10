@@ -17,15 +17,15 @@ import edu.cmu.ds.messagepasser.model.Rule;
 public class ConfigFileParser {
 
 	private Node loggerNode;
-	private ArrayList<Node> peerNodes = new ArrayList<Node>();
-	private ArrayList<Rule> sendRules, receiveRules;
+	private List<Node> allNodes = new ArrayList<Node>();
+	private List<Node> peerNodes = new ArrayList<Node>();
+	private List<Rule> sendRules, receiveRules;
 	private Node localNode;
 	private Integer localNodeIndex = 0;
 	private Map<String, List<String>> groupMembers = new HashMap<String, List<String>>();
 
 	@SuppressWarnings("unchecked")
-	public ConfigFileParser(String configurationFileName, String localName)
-			throws FileNotFoundException {
+	public ConfigFileParser(String configurationFileName, String localName) throws FileNotFoundException {
 
 		InputStream input = new FileInputStream(new File(configurationFileName));
 		Yaml yaml = new Yaml();
@@ -51,21 +51,22 @@ public class ConfigFileParser {
 		int nodeIndex = 0;
 		for (Object c : configurationList) {
 			Map<String, Object> configEntry = (Map<String, Object>) c;
+			Node node = new Node(configEntry.get("name").toString(), configEntry.get("ip").toString(), new Integer(
+					configEntry.get("port").toString()));
 			if (!configEntry.get("name").equals(localName)) {
-				Node node = new Node(configEntry.get("name").toString(), configEntry.get("ip")
-						.toString(), new Integer(configEntry.get("port").toString()));
 				peerNodes.add(node);
 			} else {
-				localNode = new Node(configEntry.get("name").toString(), configEntry.get("ip")
-						.toString(), new Integer(configEntry.get("port").toString()));
+				localNode = node;
 				localNodeIndex = nodeIndex;
 			}
+			allNodes.add(node);
 			nodeIndex++;
 		}
 	}
-	
+
 	/**
 	 * Read configuration map loaded from file, and set up node groups
+	 * 
 	 * @param configMap
 	 */
 	@SuppressWarnings("unchecked")
@@ -89,8 +90,7 @@ public class ConfigFileParser {
 		List<Object> loggerList = (List<Object>) configMap.get("logger");
 		if (loggerList != null && !loggerList.isEmpty()) {
 			Map<String, Object> loggerEntry = (Map<String, Object>) loggerList.get(0);
-			loggerNode = new Node("", loggerEntry.get("ip").toString(), new Integer(loggerEntry
-					.get("port").toString()));
+			loggerNode = new Node("", loggerEntry.get("ip").toString(), new Integer(loggerEntry.get("port").toString()));
 		} else {
 			throw new RuntimeException("Cannot find config for logger");
 		}
@@ -106,8 +106,7 @@ public class ConfigFileParser {
 	 * @throws FileNotFoundException
 	 */
 	@SuppressWarnings("unchecked")
-	private ArrayList<Rule> parseRules(Map<String, Object> configMap, String ruleType)
-			throws FileNotFoundException {
+	private ArrayList<Rule> parseRules(Map<String, Object> configMap, String ruleType) throws FileNotFoundException {
 		ArrayList<Rule> result = new ArrayList<Rule>();
 
 		List<Object> ruleList = (List<Object>) configMap.get(ruleType);
@@ -142,8 +141,12 @@ public class ConfigFileParser {
 		return loggerNode.getPort();
 	}
 
-	public ArrayList<Node> getPeerNodes() {
+	public List<Node> getPeerNodes() {
 		return peerNodes;
+	}
+	
+	public List<Node> getAllNodes() {
+		return allNodes;
 	}
 
 	public int getLocalNodeIndex() {
@@ -154,15 +157,14 @@ public class ConfigFileParser {
 		return localNode;
 	}
 
-	public ArrayList<Rule> getSendRules() {
+	public List<Rule> getSendRules() {
 		return sendRules;
 	}
 
-	public ArrayList<Rule> getReceiveRules() {
+	public List<Rule> getReceiveRules() {
 		return receiveRules;
 	}
-	
-	
+
 	public Map<String, List<String>> getGroupMembers() {
 		return groupMembers;
 	}

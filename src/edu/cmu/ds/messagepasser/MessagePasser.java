@@ -43,9 +43,10 @@ public class MessagePasser {
 	private ConcurrentLinkedQueue<TimeStampedMessage> sendDelayedBuffer = new ConcurrentLinkedQueue<TimeStampedMessage>();
 	private LinkedList<TimeStampedMessage> holdBackQueue = new LinkedList<TimeStampedMessage>();
 	private HashSet<String> receivedMulticast = new HashSet<String>();
-	private ArrayList<Rule> receiveRuleList;
-	private ArrayList<Rule> sendRuleList;
-	private ArrayList<Node> peerNodeList;
+	private List<Rule> receiveRuleList;
+	private List<Rule> sendRuleList;
+	private List<Node> peerNodeList;
+	private List<Node> allNodeList;
 	private ServerSocket listenerSocket;
 	private Map<String, Socket> clientSocketPool = new HashMap<String, Socket>();
 	private Map<String, ObjectOutputStream> clientOutputPool = new HashMap<String, ObjectOutputStream>();
@@ -70,6 +71,7 @@ public class MessagePasser {
 		ConfigFileParser parser;
 		parser = new ConfigFileParser(this.configurationFileName, this.localName);
 		this.peerNodeList = parser.getPeerNodes();
+		this.allNodeList = parser.getAllNodes();
 		this.receiveRuleList = parser.getReceiveRules();
 		this.sendRuleList = parser.getSendRules();
 		this.loggerIp = parser.getLoggerIp();
@@ -112,6 +114,10 @@ public class MessagePasser {
 			Entry<String, List<String>> group = iter.next();
 			System.out.println(group.getKey() + ": " + group.getValue().toString());
 		}
+	}
+
+	public void printTimeStamp() {
+		System.out.println(localName + " time stamp: " + clockService.getTimeStamp());
 	}
 
 	public Map<String, List<String>> getGroupMembers() {
@@ -197,9 +203,11 @@ public class MessagePasser {
 		TimeStampedMessage newMessage = new TimeStampedMessage(message);
 		newMessage.setSource(localName);
 		newMessage.setSequenceNumber(sequenceNumber.addAndGet(1));
-		// Increment timestamp
-		newMessage.setTimeStamp(clockService.getIncTimeStamp());
-		System.out.println(localName + " time stamp: " + clockService.getTimeStamp());
+		if (includeSelf) {
+			// Increment timestamp
+			newMessage.setTimeStamp(clockService.getIncTimeStamp());
+			printTimeStamp();
+		}
 
 		/*
 		 * Multicast to the target group by sequentially send messages to
@@ -239,7 +247,7 @@ public class MessagePasser {
 		 */
 		if (!isMulticastMessage) {
 			message.setTimeStamp(clockService.getIncTimeStamp());
-			System.out.println(localName + " time stamp: " + clockService.getTimeStamp());
+			printTimeStamp();
 		}
 
 		// Get a connection
@@ -367,7 +375,7 @@ public class MessagePasser {
 	}
 
 	/**
-	 * Get an index number of a node with a specified name.
+	 * Get an index number of a node with a specific name
 	 * 
 	 * @param nodeName
 	 *            A name of the node
@@ -375,8 +383,23 @@ public class MessagePasser {
 	 */
 	public Integer getNodeIndex(String nodeName) {
 		for (int i = 0; i < peerNodeList.size(); i++) {
-			Node peerNode = peerNodeList.get(i);
-			if (peerNode.getName().equals(nodeName)) {
+			Node node = peerNodeList.get(i);
+			if (node.getName().equals(nodeName)) {
+				return i;
+			}
+		}
+		return null;
+	}
+	
+	/**
+	 * Get a process index of a node with a specific name
+	 * @param nodeName
+	 * @return
+	 */
+	public Integer getProcessIndex(String nodeName) {
+		for (int i = 0; i < allNodeList.size(); i++) {
+			Node node = allNodeList.get(i);
+			if (node.getName().equals(nodeName)) {
 				return i;
 			}
 		}
@@ -486,7 +509,7 @@ public class MessagePasser {
 					TimeStampedMessage tsm = holdBackQueue.get(i);
 					ArrayList<Integer> messageTimeStamp = (ArrayList<Integer>) tsm.getTimeStamp();
 					String name = ((String) tsm.getData()).split(" ")[MULTICAST_MSG_MULTICASTER_NAME_INDEX];
-					int j = getNodeIndex(name);
+					int j = getProcessIndex(name);
 					boolean mustDeliver = true;
 					// Check Vj[j] == Vi[j] + 1
 					if (messageTimeStamp.get(j).equals(localTimeStamp.get(j) + 1)) {
@@ -506,13 +529,21 @@ public class MessagePasser {
 					if (mustDeliver) {
 						removeLater.add(tsm);
 						receiveBuffer.add(tsm);
+						// Increment timestamp
+//						clockService.getIncTimeStamp();
+//						System.out.println(localName + " time stamp: " +
+						// clockService.getTimeStamp());
 						// Vi[j] = Vi[j] + 1
 						// Increment local time stamp at the multicaster entry
-						localTimeStamp.set(j, localTimeStamp.get(j) + 1);
+						((VectorClock) clockService).incTimeStamp(j);
+//						clockService.
+//						localTimeStamp.set(j, localTimeStamp.get(j) + 1);
+//						clockService.updateTime(tsm.getTimeStamp());
 					}
 				}
-				// After sending messages in the hold-back queue, they must be removed later here
-				for (TimeStampedMessage tsm: removeLater) {
+				// After sending messages in the hold-back queue, they must be
+				// removed later here
+				for (TimeStampedMessage tsm : removeLater) {
 					holdBackQueue.remove(tsm);
 				}
 			} // end synchronize(holdBackQueue)
@@ -535,7 +566,7 @@ public class MessagePasser {
 		receiveBuffer.add(message);
 		// Increment timestamp
 		clockService.updateTime(message.getTimeStamp());
-		System.out.println(localName + " time stamp: " + clockService.getTimeStamp());
+		printTimeStamp();
 		// Duplicate the message and deliver it
 		if (mustDuplicate) {
 			TimeStampedMessage duplicateMessage = new TimeStampedMessage(message);
@@ -543,14 +574,14 @@ public class MessagePasser {
 			receiveBuffer.add(duplicateMessage);
 			// Increment timestamp
 			clockService.updateTime(message.getTimeStamp());
-			System.out.println(localName + " time stamp: " + clockService.getTimeStamp());
+			printTimeStamp();
 		}
 		// Deliver delayed messages
 		while (!receiveDelayedBuffer.isEmpty()) {
 			receiveBuffer.add(receiveDelayedBuffer.poll());
 			// Increment timestamp
 			clockService.updateTime(message.getTimeStamp());
-			System.out.println(localName + " time stamp: " + clockService.getTimeStamp());
+			printTimeStamp();
 		}
 		System.out.print(commandPrompt);
 	}
@@ -688,7 +719,7 @@ public class MessagePasser {
 			}
 		}
 
-		System.out.println("Please enter 'send' or 'exit' or 'mark' or 'multicast'");
+		System.out.println("Please enter 'send' or 'exit' or 'mark' or 'multicast' or 'time'");
 		System.out.print(commandPrompt);
 		String command;
 		while ((command = input.readLine()) != null) {
@@ -697,6 +728,11 @@ public class MessagePasser {
 				 * Exit
 				 */
 				break;
+			} else if (command.equals("time")) {
+				/*
+				 * Time - Print current time stamp
+				 */
+				messagePasser.printTimeStamp();
 			} else if (command.equals("send")) {
 				/*
 				 * Send
@@ -789,7 +825,7 @@ public class MessagePasser {
 				}
 			}
 			System.out.println("-------------------");
-			System.out.println("Please enter 'send' or 'exit' or 'mark' or 'multicast'");
+			System.out.println("Please enter 'send' or 'exit' or 'mark' or 'multicast' or 'time'");
 			System.out.print(commandPrompt);
 		}
 		input.close();
