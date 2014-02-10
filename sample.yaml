@@ -38,7 +38,7 @@ logger :
 # This is the incoming port on which MP will listen
 # May be changed for further communication as usual
 sendRules :
-  - action : drop # Ack message number 4 from bob to alice will not be sent
+  - action : drop
     kind : drop
     #src    : alice
     #dest   : bob
