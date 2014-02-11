@@ -14,6 +14,8 @@ public class Message implements Serializable {
 	protected String source;
 	protected Integer sequenceNumber;
 	protected boolean isDuplicate;
+	public static final int MULTICAST_MSG_MULTICASTER_NAME_INDEX = 3;
+	public static final int MULTICAST_MSG_GROUP_NAME_INDEX = 5;
 
 	/**
 	 * Create an empty message
@@ -105,13 +107,9 @@ public class Message implements Serializable {
 
 	@Override
 	public String toString() {
-		return "Message[\n\tsource = " + source + 
-				"\n\tdestination = " + destination +
-				"\n\tsequenceNumber = " + sequenceNumber + 
-				"\n\tisDuplicate = " + isDuplicate + 
-				"\n\tkind = " + kind + 
-				"\n\tbody = " + (String) data + 
-				"\n]";
+		return "Message[\n\tsource = " + source + "\n\tdestination = " + destination + "\n\tsequenceNumber = "
+				+ sequenceNumber + "\n\tisDuplicate = " + isDuplicate + "\n\tkind = " + kind + "\n\tbody = "
+				+ (String) data + "\n]";
 	}
 
 }

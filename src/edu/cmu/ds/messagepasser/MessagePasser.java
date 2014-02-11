@@ -32,8 +32,6 @@ import edu.cmu.ds.messagepasser.model.TimeStampedMessage;
 
 public class MessagePasser {
 	private static final String DEFAULT_CONFIG_FILENAME = "sample.yaml";
-	private static final int MULTICAST_MSG_MULTICASTER_NAME_INDEX = 3;
-	private static final int MULTICAST_MSG_GROUP_NAME_INDEX = 5;
 	private static String commandPrompt = ">: ";
 	private String configurationFileName;
 	private String localName;
@@ -126,7 +124,7 @@ public class MessagePasser {
 		Iterator<Entry<String, VectorClock>> iter = clockServiceGroups.entrySet().iterator();
 		while (iter.hasNext()) {
 			Entry<String, VectorClock> entry = iter.next();
-			System.out.println("\t"+entry.getKey()+": "+entry.getValue());
+			System.out.println("\t" + entry.getKey() + ": " + entry.getValue());
 		}
 	}
 
@@ -212,7 +210,7 @@ public class MessagePasser {
 		}
 		List<String> destinationNodeNames = groupMembers.get(groupName);
 		VectorClock groupClock = clockServiceGroups.get(groupName);
-		
+
 		// Increment sequence number
 		sequenceNumber.incrementAndGet();
 		if (includeSelf) {
@@ -228,6 +226,7 @@ public class MessagePasser {
 		// CO-deliver itself
 		if (includeSelf) {
 			TimeStampedMessage newMessage = new TimeStampedMessage(message);
+			newMessage.setKind("multicast");
 			newMessage.setSource(localName);
 			newMessage.setSequenceNumber(sequenceNumber.get());
 			newMessage.setDestination(localName);
@@ -237,6 +236,7 @@ public class MessagePasser {
 		for (String nodeName : destinationNodeNames) {
 			if (!nodeName.equals(localName)) {
 				TimeStampedMessage newMessage = new TimeStampedMessage(message);
+				newMessage.setKind("multicast");
 				newMessage.setSource(localName);
 				newMessage.setSequenceNumber(sequenceNumber.get());
 				newMessage.setDestination(nodeName);
@@ -501,78 +501,83 @@ public class MessagePasser {
 	 * remember and deliver it. If it is not the sender of this message,
 	 * multicast it to the other group members.
 	 * 
-	 * @param message
+	 * @param receivedMessage
 	 */
-	// TODO Assign vector timestamp for each group
-	private void handleReceiveMulticastMessage(TimeStampedMessage message) {
-		String messageBody = (String) message.getData();
-		synchronized (receivedMulticast) {
-			// R-deliver: Check whether it has received this message
-			if (receivedMulticast.contains(messageBody))
-				return;
-			receivedMulticast.add(messageBody);
-			String multicaster = messageBody.split(" ")[MULTICAST_MSG_MULTICASTER_NAME_INDEX];
-			String groupName = messageBody.split(" ")[MULTICAST_MSG_GROUP_NAME_INDEX];
-			VectorClock groupClock = clockServiceGroups.get(groupName);
-			System.out.println("\n\nReceived a multicast by {" + multicaster + "} from {" + message.getSource() + "}");
-			// R-deliver: Multicast it if current node is not its sender
-			if (message.getSource().equals(localName))
-				return;
-			System.out.println("Will multicast it to " + groupName + " soon");
-			synchronized (holdBackQueue) {
-				ArrayList<TimeStampedMessage> removeLater;
-				// CO-deliver: Put it in the hold-back queue
-				holdBackQueue.add(message);
-				// Also put delayed messages into the hold-back queue
-				while (!receiveDelayedBuffer.isEmpty()) {
-					holdBackQueue.add(receiveDelayedBuffer.poll());
-				}
-				do {
-					removeLater = new ArrayList<TimeStampedMessage>();
-					// Look for messages that satisfy CO-delivery conditions
-					ArrayList<Integer> localTimeStamp = (ArrayList<Integer>) groupClock.getTimeStamp();
-					for (int i = 0; i < holdBackQueue.size(); i++) {
-						TimeStampedMessage tsm = holdBackQueue.get(i);
-						ArrayList<Integer> messageTimeStamp = (ArrayList<Integer>) tsm.getTimeStamp();
-						String name = ((String) tsm.getData()).split(" ")[MULTICAST_MSG_MULTICASTER_NAME_INDEX];
-						int j = getProcessIndex(name);
-						boolean mustDeliver = true;
-						// Check Vj[j] == Vi[j] + 1
-						if (messageTimeStamp.get(j).equals(localTimeStamp.get(j) + 1)) {
-							// Check Vj[k] <= Vi[k] and k != j
-							for (int k = 0; k < messageTimeStamp.size(); k++) {
-								if (k == j)
-									continue;
-								if (messageTimeStamp.get(k).compareTo(localTimeStamp.get(k)) > 0) {
-									mustDeliver = false;
-									break;
-								}
-							}
-						} else {
+	private synchronized void handleReceiveMulticastMessage(TimeStampedMessage receivedMessage) {
+		String messageBody = (String) receivedMessage.getData();
+		// {R-deliver} Check whether it has received this message
+		if (receivedMulticast.contains(messageBody))
+			return;
+		receivedMulticast.add(messageBody);
+		String multicaster = receivedMessage.getMulticasterName();
+		String groupName = receivedMessage.getMulticastGroupName();
+		VectorClock groupClock = clockServiceGroups.get(groupName);
+		System.out
+				.println("\nReceived a multicast by {" + multicaster + "} from {" + receivedMessage.getSource() + "}");
+		// {R-deliver} Multicast it if current node is not its sender
+		if (receivedMessage.getSource().equals(localName))
+			return;
+		System.out.println("Will multicast it to " + groupName + " soon");
+		// {CO-deliver} Put it in the hold-back queue
+		holdBackQueue.add(receivedMessage);
+		// Help make sure that there are no messages that satisfy delivery
+		// condition being leftover in the queue
+		LinkedList<TimeStampedMessage> deliveredList = new LinkedList<TimeStampedMessage>();
+		int lastDeliveredListSize;
+		do {
+			lastDeliveredListSize = deliveredList.size();
+			// Look for messages that satisfy CO-delivery conditions
+			ArrayList<Integer> localTimeStamp = (ArrayList<Integer>) groupClock.getTimeStamp();
+			for (int i = 0; i < holdBackQueue.size(); i++) {
+				// Get only message that hasn't been processed yet
+				TimeStampedMessage messageInQueue = holdBackQueue.get(i);
+				if (deliveredList.contains(messageInQueue))
+					continue;
+				// Check whether or not message satisfies delivery condition
+				ArrayList<Integer> messageTimeStamp = (ArrayList<Integer>) messageInQueue.getTimeStamp();
+				int j = getProcessIndex(messageInQueue.getMulticasterName());
+				boolean mustDeliver = true;
+				// Check Vj[j] == Vi[j] + 1
+				if (messageTimeStamp.get(j).equals(localTimeStamp.get(j) + 1)) {
+					// Check Vj[k] <= Vi[k] and k != j
+					for (int k = 0; k < messageTimeStamp.size(); k++) {
+						if (k == j)
+							continue;
+						if (messageTimeStamp.get(k).compareTo(localTimeStamp.get(k)) > 0) {
 							mustDeliver = false;
-						}
-						// CO-deliver: Pull it from the queue deliver
-						if (mustDeliver) {
-							removeLater.add(tsm);
-							receiveBuffer.add(tsm);
-							// Inc local time stamp at the multicaster entry
-							groupClock.incTimeStamp(j);
+							break;
 						}
 					}
-					// After sending from hold-back queue, they must be removed
-					// later here
-					for (TimeStampedMessage tsm : removeLater) {
-						holdBackQueue.remove(tsm);
-					}
-					// If there are sth to remove, that means there are some
-					// messages in the hold-back queue that could be delivered!
-				} while (!removeLater.isEmpty());
-			} // end synchronize(holdBackQueue)
+				} else
+					mustDeliver = false;
+				if (mustDeliver) {
+					// Remember it to be removed from the queue later
+					deliveredList.add(messageInQueue);
+					// Deliver this message
+					receiveBuffer.add(messageInQueue);
+					// Vi[j] := Vi[j] + 1
+					groupClock.incTimeStamp(j);
+					// {R-deliver} Then, multicast it
+					System.out.println("Multicast the delivered message to " + groupName);
+					multicast(messageInQueue.getMulticastGroupName(), messageInQueue, false);
+				}
+			}
+			// If there are some messages that delivered this round, there might
+			// be more messages in holdBackQueue that should deliver as well.
+			// So, we need to check it again
+		} while (deliveredList.size() > lastDeliveredListSize);
 
-			// Then, multicast this message to other members (except itself)
-			System.out.println("Multicasting the received message to " + groupName);
-			multicast(groupName, message, false);
-		} // end synchronized(receivedMulticast)
+		// Remove delivered message from the hold-back queue
+		for (TimeStampedMessage toRemoveMessage : deliveredList) {
+			holdBackQueue.remove(toRemoveMessage);
+		}
+
+		// Process messages in receiveDelayedBuffer
+		// TODO only message with the same multicaster?
+		while (!receiveDelayedBuffer.isEmpty()) {
+			handleReceiveMulticastMessage(receiveDelayedBuffer.poll());
+		}
+
 		System.out.print(commandPrompt);
 	}
 
@@ -734,7 +739,7 @@ public class MessagePasser {
 				// Create a MessagePasser instance and start it!
 				messagePasser = new MessagePasser(configurationFileName, localName, "l".equals(clockType));
 				// Modify command prompt display
-				commandPrompt = (messagePasser.isUsingLogicalClock() ? "logical " : "vector ") + localName
+				commandPrompt = "\n" + (messagePasser.isUsingLogicalClock() ? "logical " : "vector ") + localName
 						+ commandPrompt;
 				break;
 			} catch (FileNotFoundException e) {
@@ -823,13 +828,6 @@ public class MessagePasser {
 				if (!messagePasser.getGroupMembers().get(groupName).contains(localName)) {
 					System.out.println("Couldn't multicast. You are not a member of this group.");
 				} else {
-					/*
-					 * Important: We use this message as a metadata for
-					 * multicasting. After split(" "), targetMulticastGroupName
-					 * will be at [MULTICAST_MESSAGE_GROUP_NAME_INDEX]
-					 */
-					String data = "Multicast message from " + localName + " to " + groupName
-							+ " with MulticastSequenceNumber " + messagePasser.getIncMulticastSequenceNumber();
 					String logInfo;
 					do {
 						System.out.println("Do you want log this message? (y/N)");
@@ -838,7 +836,9 @@ public class MessagePasser {
 					} while (!logInfo.equals("y") && !logInfo.equals("n") && !logInfo.equals(""));
 
 					boolean mustLog = (logInfo.toLowerCase().equals("y"));
-					TimeStampedMessage message = new TimeStampedMessage(groupName, "multicast", data);
+					TimeStampedMessage message = new TimeStampedMessage();
+					message.setSource(localName);
+					message.setMulticastMessageBody(groupName, messagePasser.getIncMulticastSequenceNumber());
 					messagePasser.multicast(groupName, message, true);
 
 					if (mustLog) {
