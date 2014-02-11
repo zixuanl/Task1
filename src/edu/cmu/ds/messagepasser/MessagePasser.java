@@ -575,7 +575,6 @@ public class MessagePasser {
 		}
 
 		// Process messages in receiveDelayedBuffer
-		// TODO only message with the same multicaster?
 		while (!receiveDelayedBuffer.isEmpty()) {
 			handleReceiveMulticastMessage(receiveDelayedBuffer.poll());
 		}
