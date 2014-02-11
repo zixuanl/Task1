@@ -38,9 +38,9 @@ logger :
 # This is the incoming port on which MP will listen
 # May be changed for further communication as usual
 sendRules :
-  # - action : delay
-  #   src    : alice
-    # seqNum : 4
+   - action : delay
+     src    : alice
+     seqNum : 100
 
 # With this receiveRules. We can test reliability & causability by:
 # 1. alice multicasts to group1:

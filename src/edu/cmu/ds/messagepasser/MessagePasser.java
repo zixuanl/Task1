@@ -592,7 +592,7 @@ public class MessagePasser {
 	 * 
 	 * @param message
 	 */
-	private void handleReceiveNormalMessage(TimeStampedMessage message, boolean mustDuplicate) {
+	private synchronized void handleReceiveNormalMessage(TimeStampedMessage message, boolean mustDuplicate) {
 		// Deliver current message
 		receiveBuffer.add(message);
 		// Increment timestamp
@@ -665,6 +665,7 @@ public class MessagePasser {
 				try {
 					while (!willTerminate) {
 						receive();
+						Thread.sleep(100);
 					}
 				} catch (Exception e) {
 					e.printStackTrace();
