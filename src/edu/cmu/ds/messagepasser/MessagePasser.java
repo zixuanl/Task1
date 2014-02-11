@@ -515,8 +515,10 @@ public class MessagePasser {
 		System.out
 				.println("\nReceived a multicast by {" + multicaster + "} from {" + receivedMessage.getSource() + "}");
 		// {R-deliver} Multicast it if current node is not its sender
-		if (receivedMessage.getSource().equals(localName))
+		if (receivedMessage.getSource().equals(localName)) {
+			receiveBuffer.add(receivedMessage);
 			return;
+		}
 		System.out.println("Will multicast it to " + groupName + " soon");
 		// {CO-deliver} Put it in the hold-back queue
 		holdBackQueue.add(receivedMessage);

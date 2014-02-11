@@ -38,30 +38,32 @@ logger :
 # This is the incoming port on which MP will listen
 # May be changed for further communication as usual
 sendRules :
-  - action : delay
-    src    : alice
-    # dest   : bob
-    seqNum : 4
+  # - action : delay
+  #   src    : alice
+    # seqNum : 4
 
-  - action : drop # Every Lookup message in the system will be delayed
-    kind   : lookup
-
-  - action : delay # Every Lookup message in the system will be delayed
-    src    : bob
-    dest   : alice
-    kind   : lookup
+# With this receiveRules. We can test reliability & causability by:
+# 1. alice multicasts to group1:
+#       alice shows 100
+#       bob drops (A) then delays (C)
+#       charlie shows 100
+# 2. charlie multicasts to group1:
+#       alice shows 101
+#       bob delays (C) then drop (A)
+#       charlie shows 101
+# 3. alice multicasts to group1:
+#       alice shows 201
+#       bob drops (A) then shows 100 101 201, all from charlie
+#           // because delay rules no more valid at seqNum == 3
+#       charlie shows 201
 
 receiveRules :
-  # - action : delay
-  #   dest   : bob
-  #   seqNum : 1
   - action : drop
     src    : alice
-    seqNum : 20
+    dest   : bob
   - action : delay
-    src    : alice
-    seqNum : 20
-  - action : duplicate
-    src    : alice
-    seqNum : 20
-
+    dest   : bob
+    seqNum : 1
+  - action : delay
+    dest   : bob
+    seqNum : 2
