@@ -261,6 +261,7 @@ public class MessagePasser {
 	 *            True if this is called from multicast() so that it won't
 	 *            increment the global sequence number
 	 */
+
 	public void send(TimeStampedMessage message, int targetNodeIndex, boolean isMulticastMessage) {
 		/*
 		 * Increment timestamp only if the command is "send"
@@ -288,6 +289,7 @@ public class MessagePasser {
 			System.out.println("Couldn't connect to " + message.getDestination() + " | " + e);
 			return;
 		}
+
 
 		// If this is an ordinary message, increase and get sequence number
 		// Then assign it to the message
