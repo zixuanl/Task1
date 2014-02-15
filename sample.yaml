@@ -18,19 +18,35 @@ configuration :
   - name : daphnie
     ip   : 127.0.0.1
     port : 15555
+  - name : edward
+    ip   : 127.0.0.1
+    port : 20000
+  - name : frank
+    ip   : 127.0.0.1
+    port : 30432
+  - name : guy
+    ip   : 127.0.0.1
+    port : 94385
+
 
 groups :
   - name : group1
     members :
       - alice
       - bob
+      - charlie
+      - daphnie
   - name : group2
     members :
-      - bob
       - charlie
+      - daphnie
+      - edward
+      - frank
   - name : group3
     members :
-      - charlie
+      - edward
+      - frank
+      - guy
       - alice
 
 logger :
