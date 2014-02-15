@@ -24,12 +24,14 @@ groups :
     members :
       - alice
       - bob
-      - charlie
   - name : group2
     members :
-      - daphnie
       - bob
       - charlie
+  - name : group3
+    members :
+      - charlie
+      - alice
 
 logger :
   - ip : 127.0.0.1
@@ -57,13 +59,28 @@ sendRules :
 #           // because delay rules no more valid at seqNum == 3
 #       charlie shows 201
 
+
+# Withe these rules:
+# A request multicast to A and B and C.  B -> Ack A    C -> Ack A  unique message
+#
+# B request multicast to A and B and C.  
+# B and C got it put into queue. A delay from B and drop from C
+# 
+# delete these rules
+#
+# C request multicast to A and B and C.  A and B and C got it. A should deliver  
+# the request of B first and then the request from C
+# 
+#
+
+
 receiveRules :
-  - action : drop
-    src    : alice
-    dest   : bob
   - action : delay
-    dest   : bob
-    seqNum : 1
-  - action : delay
-    dest   : bob
-    seqNum : 2
+    src    : bob
+    kind   : multicastRequest12345
+
+#  - action : drop
+#    src    : charlie
+#    dest   : alice
+#    kind   : multicastRequest
+

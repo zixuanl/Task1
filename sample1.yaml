@@ -6,42 +6,80 @@
 # These names will be used for src and dest addresses for the Message
 # The local node’s name is included in this list
 configuration :
-- name : alice
-  ip   : 128.237.217.26
-  port : 12344
-- name : bob
-  ip   : 128.237.217.26
-  port : 14255
+  - name : alice
+    ip   : 127.0.0.1
+    port : 12344
+  - name : bob
+    ip   : 127.0.0.1
+    port : 14255
+  - name : charlie
+    ip   : 127.0.0.1
+    port : 12998
+  - name : daphnie
+    ip   : 127.0.0.1
+    port : 15555
 
-  
+groups :
+  - name : group1
+    members :
+      - alice
+      - bob
+      - charlie
+      - daphnie
+
+logger :
+  - ip : 127.0.0.1
+    port : 3333
+
 # This is the incoming port on which MP will listen
 # May be changed for further communication as usual
 sendRules :
-  - action : duplicate # Ack message number 4 from bob to alice will not be sent
-    src    : alice
-    dest   : bob
-    kind   : Ack
-    seqNum : 0
+   - action : delay
+     src    : alice
+     seqNum : 100
 
-  - action : drop # Every Lookup message in the system will be delayed
-    kind   : Lookup
+# With this receiveRules. We can test reliability & causability by:
+# 1. alice multicasts to group1:
+#       alice shows 100
+#       bob drops (A) then delays (C)
+#       charlie shows 100
+# 2. charlie multicasts to group1:
+#       alice shows 101
+#       bob delays (C) then drop (A)
+#       charlie shows 101
+# 3. alice multicasts to group1:
+#       alice shows 201
+#       bob drops (A) then shows 100 101 201, all from charlie
+#           // because delay rules no more valid at seqNum == 3
+#       charlie shows 201
 
-  - action : delay # Every Lookup message in the system will be delayed
-    src    : bob
-    dest   : alice
-    kind   : Lookup
+
+# Withe these rules:
+# A request multicast to A and B and C.  B -> Ack A    C -> Ack A  unique message
+#
+# B request multicast to A and B and C.  
+# B and C got it put into queue. A delay from B and drop from C
+# 
+# delete these rules
+#
+# C request multicast to A and B and C.  A and B and C got it. A should deliver  
+# the request of B first and then the request from C
+# 
+#
+
 
 receiveRules :
-  - action : drop
-    src    : alice
-    seqNum : 10
   - action : delay
-    src    : alice
-    seqNum : 20
-  - action : duplicate
-    src    : alice
-    seqNum : 30
+    src    : bob
+    dest   : alice
+    kind   : multicastRequest1234
+  - action : drop
+    src    : charlie
+    dest   : alice
+    kind   : multicastRequest1234
+  - action : drop
+    src    : daphnie
+    dest   : alice
+    kind   : multicastRequest1234
 
 
-# 3rd message from Charlie that anyone
-# receives will be duplicated

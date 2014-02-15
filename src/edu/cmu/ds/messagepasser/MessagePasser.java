@@ -32,10 +32,20 @@ import edu.cmu.ds.messagepasser.model.TimeStampedMessage;
 
 public class MessagePasser {
 	private static final String DEFAULT_CONFIG_FILENAME = "sample.yaml";
+	private final Integer RELEASED = 1;
+	private final Integer WANTED = 2;
+	private final Integer HELD = 3;
+	private final Integer REQUEST = 4;
+	private final Integer RELEASE = 5;
+	private final Integer NORMAL = 6;
+	private Integer state;
+	private boolean voted;
+	private Integer receivedAckNumber;
 	private static String commandPrompt = ">: ";
 	private String configurationFileName;
 	private String localName;
 	private AtomicInteger sequenceNumber = new AtomicInteger(0);
+	private ConcurrentLinkedQueue<TimeStampedMessage> requestQueue = new ConcurrentLinkedQueue<TimeStampedMessage>();
 	private ConcurrentLinkedQueue<TimeStampedMessage> receiveBuffer = new ConcurrentLinkedQueue<TimeStampedMessage>();
 	private ConcurrentLinkedQueue<TimeStampedMessage> receiveDelayedBuffer = new ConcurrentLinkedQueue<TimeStampedMessage>();
 	private ConcurrentLinkedQueue<TimeStampedMessage> sendDelayedBuffer = new ConcurrentLinkedQueue<TimeStampedMessage>();
@@ -66,7 +76,9 @@ public class MessagePasser {
 		this.configurationFileName = inConfigurationFilename;
 		this.localName = inLocalName;
 		this.useLogicalClock = inUseLogicalClock;
-
+		this.state = RELEASED;
+		this.voted = false;
+		this.receivedAckNumber = 0;
 		ConfigFileParser parser;
 		parser = new ConfigFileParser(this.configurationFileName, this.localName);
 		this.peerNodeList = parser.getPeerNodes();
@@ -193,6 +205,73 @@ public class MessagePasser {
 		ot.close();
 		socket.close();
 	}
+	
+	
+	/**
+	 * Request the mutex
+	 * @throws IOException 
+	 * @param null
+	 * @throws InterruptedException 
+	 * 
+	 */
+	public void request() throws IOException, InterruptedException {
+		InputStreamReader reader = new InputStreamReader(System.in);
+		BufferedReader input = new BufferedReader(reader);
+		System.out.println("Trying to enter the critical section");
+		state = WANTED;
+		String groupName = null;
+		do {
+			System.out.println("Please specify request group");
+			
+			// List all groups and their members
+			Iterator<Entry<String, List<String>>> iter = groupMembers.entrySet().iterator();
+			while (iter.hasNext()) {
+				Entry<String, List<String>> group = iter.next();
+				System.out.println(group.getKey() + ": " + group.getValue().toString());
+			}
+			
+			System.out.print(commandPrompt);
+			groupName = input.readLine();
+		} while (!getGroupMembers().containsKey(groupName));
+
+		if (!getGroupMembers().get(groupName).contains(localName)) {
+			System.out.println("Couldn't request. You are not a member of this group.");
+		} else {
+			TimeStampedMessage message = new TimeStampedMessage();
+			message.setSource(localName);
+			message.setKind("multicastRequest");
+			message.setMulticastMessageBody(groupName, getIncMulticastSequenceNumber());
+			multicast(groupName, message, true);
+		}
+		System.out.println("Waiting for the ACKs...............");
+		while (true) {
+			if (receivedAckNumber == getGroupMembers().get(groupName).size()){
+				Thread.sleep(200);
+				System.out.println("Received all the ACKs, holding the mutex!!!!!");
+				break;
+			}
+		}
+		receivedAckNumber = 0;
+		System.out.print("Enter y to exit the release the mutex");
+		System.out.print(commandPrompt);
+		while (true) {
+			String command = input.readLine();
+			if (command.equals("y"))
+				break;
+		}
+		System.out.println("Exit the critical section");
+		state = RELEASED;
+		System.out.println("Multicat the release");
+		
+		TimeStampedMessage releaseMessage = new TimeStampedMessage();
+		releaseMessage.setSource(localName);
+		releaseMessage.setKind("multicastRelease");
+		releaseMessage.setMulticastMessageBody(groupName, getIncMulticastSequenceNumber());
+		multicast(groupName, releaseMessage, true);
+		
+	}
+	
+	
 
 	/**
 	 * Multicast a message to multiple recipients
@@ -226,7 +305,6 @@ public class MessagePasser {
 		// CO-deliver itself
 		if (includeSelf) {
 			TimeStampedMessage newMessage = new TimeStampedMessage(message);
-			newMessage.setKind("multicast");
 			newMessage.setSource(localName);
 			newMessage.setSequenceNumber(sequenceNumber.get());
 			newMessage.setDestination(localName);
@@ -236,7 +314,6 @@ public class MessagePasser {
 		for (String nodeName : destinationNodeNames) {
 			if (!nodeName.equals(localName)) {
 				TimeStampedMessage newMessage = new TimeStampedMessage(message);
-				newMessage.setKind("multicast");
 				newMessage.setSource(localName);
 				newMessage.setSequenceNumber(sequenceNumber.get());
 				newMessage.setDestination(nodeName);
@@ -478,7 +555,7 @@ public class MessagePasser {
 							}
 						}
 
-						if (message.getKind().equals("multicast")) {
+						if (message.getKind().equals("multicast") || message.getKind().equals("multicastRequest") || message.getKind().equals("multicastRelease")) {
 							handleReceiveMulticastMessage(message);
 						} else {
 							handleReceiveNormalMessage(message, mustDuplicate);
@@ -518,7 +595,43 @@ public class MessagePasser {
 				.println("\nReceived a multicast by {" + multicaster + "} from {" + receivedMessage.getSource() + "}");
 		// {R-deliver} Multicast it if current node is not its sender
 		if (receivedMessage.getSource().equals(localName)) {
-			receiveBuffer.add(receivedMessage);
+			
+			if (receivedMessage.getKind().equals("multicastRequest")) {
+				if (state == HELD || voted == true) {
+					requestQueue.add(receivedMessage);	
+				} else {
+					TimeStampedMessage messageAck = new TimeStampedMessage();
+					messageAck.setSource(localName);
+					messageAck.setDestination(localName);
+					messageAck.setKind("replyAck");
+					//send reply to self
+					send(messageAck, -1, false);
+					voted = true;
+				}
+			} else if (receivedMessage.getKind().equals("multicastRelease")) {
+				if (requestQueue.isEmpty()) {
+					voted = false;
+				} else {
+					TimeStampedMessage messageTmp = requestQueue.poll();
+					TimeStampedMessage messageAck = new TimeStampedMessage();
+					String originalSender = messageTmp.getMulticasterName();
+					Integer originalIndex = getNodeIndex(originalSender);
+					if (originalIndex == null)
+						originalIndex = -1;
+					messageAck.setSource(localName);
+					messageAck.setDestination(originalSender);
+					messageAck.setKind("replyAck");
+					//send reply to pi
+					send(messageAck, originalIndex, false);
+					voted = true;
+					
+				}
+				
+			} else {
+				receiveBuffer.add(receivedMessage);
+			}
+			
+			
 			return;
 		}
 		System.out.println("Will multicast it to " + groupName + " soon");
@@ -558,7 +671,45 @@ public class MessagePasser {
 					// Remember it to be removed from the queue later
 					deliveredList.add(messageInQueue);
 					// Deliver this message
-					receiveBuffer.add(messageInQueue);
+					// If it is a mutex request reply the ack
+					if (messageInQueue.getKind().equals("multicastRequest")) {
+						if (state == HELD || voted == true) {
+							requestQueue.add(messageInQueue);	
+						} else {
+							TimeStampedMessage messageAck = new TimeStampedMessage();
+							String originalSender = messageInQueue.getMulticasterName();
+							Integer originalIndex = getNodeIndex(originalSender);
+							if (originalIndex == null)
+								originalIndex = -1;
+							messageAck.setSource(localName);
+							messageAck.setDestination(originalSender);
+							messageAck.setKind("replyAck");
+							//send reply to pi
+							send(messageAck, originalIndex, false);
+							voted = true;
+						}
+						
+					} else if (messageInQueue.getKind().equals("multicastRelease")) {
+						if (requestQueue.isEmpty()) {
+							voted = false;
+						} else {
+							TimeStampedMessage messageTmp = requestQueue.poll();
+							TimeStampedMessage messageAck = new TimeStampedMessage();
+							String originalSender = messageTmp.getMulticasterName();
+							Integer originalIndex = getNodeIndex(originalSender);
+							if (originalIndex == null)
+								originalIndex = -1;
+							messageAck.setSource(localName);
+							messageAck.setDestination(originalSender);
+							messageAck.setKind("replyAck");
+							//send reply to pi
+							send(messageAck, originalIndex, false);
+							voted = true;
+						}
+					} else {
+						receiveBuffer.add(messageInQueue);
+					}
+
 					// Vi[j] := Vi[j] + 1
 					groupClock.incTimeStamp(j);
 					// {R-deliver} Then, multicast it
@@ -591,10 +742,20 @@ public class MessagePasser {
 	 * delayed messages
 	 * 
 	 * @param message
+	 * @throws InterruptedException 
 	 */
-	private synchronized void handleReceiveNormalMessage(TimeStampedMessage message, boolean mustDuplicate) {
+	private synchronized void handleReceiveNormalMessage(TimeStampedMessage message, boolean mustDuplicate) throws InterruptedException {
 		// Deliver current message
-		receiveBuffer.add(message);
+		if (message.getKind().equals("replyAck")) {
+			receivedAckNumber++;
+			clockService.updateTime(message.getTimeStamp());
+			Thread.sleep(110);
+			System.out.println("Received ack from " + message.getSource());
+			return;
+		} else {
+			receiveBuffer.add(message);
+		}
+		
 		// Increment timestamp
 		clockService.updateTime(message.getTimeStamp());
 		printTimeStamp();
@@ -751,7 +912,7 @@ public class MessagePasser {
 			}
 		}
 
-		System.out.println("Please enter 'send' or 'exit' or 'mark' or 'multicast' or 'time'");
+		System.out.println("Please enter 'send' or 'exit' or 'mark' or 'multicast' or 'request' or 'time'");
 		System.out.print(commandPrompt);
 		String command;
 		while ((command = input.readLine()) != null) {
@@ -805,6 +966,7 @@ public class MessagePasser {
 					// socket has been established at the init of messagePasser
 					if (nodeIndex == null)
 						nodeIndex = -1;
+					
 					messagePasser.send(message, nodeIndex, false);
 					if (mustLog) {
 						messagePasser.log(message);
@@ -842,6 +1004,7 @@ public class MessagePasser {
 					boolean mustLog = (logInfo.toLowerCase().equals("y"));
 					TimeStampedMessage message = new TimeStampedMessage();
 					message.setSource(localName);
+					message.setKind("multicast");
 					message.setMulticastMessageBody(groupName, messagePasser.getIncMulticastSequenceNumber());
 					messagePasser.multicast(groupName, message, true);
 
@@ -850,9 +1013,11 @@ public class MessagePasser {
 						messagePasser.log(message);
 					}
 				}
+			} else if (command.equals("request")) {
+				messagePasser.request();
 			}
 			System.out.println("-------------------");
-			System.out.println("Please enter 'send' or 'exit' or 'mark' or 'multicast' or 'time'");
+			System.out.println("Please enter 'send' or 'exit' or 'mark' or 'multicast' or 'request' or 'time'");
 			System.out.print(commandPrompt);
 		}
 		input.close();

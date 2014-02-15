@@ -36,7 +36,7 @@ public class TimeStampedMessage extends Message {
 	}
 
 	public String getMulticasterName() {
-		if (!kind.equals("multicast"))
+		if (!kind.equals("multicast") && !kind.equals("multicastRequest") && !kind.equals("multicastRelease"))
 			return null;
 		try {
 			return ((String) data).split(" ")[MULTICAST_MSG_MULTICASTER_NAME_INDEX];
@@ -46,7 +46,7 @@ public class TimeStampedMessage extends Message {
 	}
 
 	public String getMulticastGroupName() {
-		if (!kind.equals("multicast"))
+		if (!kind.equals("multicast") && !kind.equals("multicastRequest") && !kind.equals("multicastRelease"))
 			return null;
 		try {
 			return ((String) data).split(" ")[MULTICAST_MSG_GROUP_NAME_INDEX];
