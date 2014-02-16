@@ -236,6 +236,7 @@ public class MessagePasser {
 
 		if (!getGroupMembers().get(groupName).contains(localName)) {
 			System.out.println("Couldn't request. You are not a member of this group.");
+			return;
 		} else {
 			TimeStampedMessage message = new TimeStampedMessage();
 			message.setSource(localName);
