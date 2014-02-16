@@ -26,7 +26,7 @@ configuration :
     port : 30432
   - name : guy
     ip   : 127.0.0.1
-    port : 94385
+    port : 44385
 
 
 groups :
@@ -35,19 +35,37 @@ groups :
       - alice
       - bob
       - charlie
-      - daphnie
   - name : group2
     members :
-      - charlie
+      - bob
       - daphnie
-      - edward
       - frank
   - name : group3
     members :
+      - charlie
       - edward
+      - frank
+  - name : group4
+    members :
+      - alice
+      - edward
+      - daphnie
+  - name : group5
+    members :
+      - bob
+      - edward
+      - guy
+  - name : group6
+    members :
       - frank
       - guy
       - alice
+  - name : group7
+    members :
+      - daphnie
+      - guy
+      - charlie
+
 
 logger :
   - ip : 127.0.0.1
@@ -99,4 +117,5 @@ receiveRules :
 #    src    : charlie
 #    dest   : alice
 #    kind   : multicastRequest
+
 
